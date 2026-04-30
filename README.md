@@ -5,11 +5,9 @@
 
 Autobots is an automation agency codebase for WhatsApp lead filtering, CRM organization, and human handoff systems for local businesses in Paraguay.
 
-The client does not buy n8n, Evolution API, Docker, or AI. The client buys faster replies, fewer lost leads, better lead organization, automatic follow-up, and a clear alert when a lead is ready for a person to close.
+## Core idea
 
-## Core Product
-
-The first product is a WhatsApp Lead Filter + CRM + Telegram/WhatsApp Human Handoff system.
+The idea is a WhatsApp Lead Filter + CRM + Telegram/WhatsApp Human Handoff system.
 
 It should help a business:
 
@@ -21,12 +19,6 @@ It should help a business:
 
 ## Target Niches
 
-Initial niches:
-
-- real estate agents and inmobiliarias
-- retail sellers and clothing stores
-- medical, psychology, and veterinary clinics
-- beauty salons and barbershops
 
 The first target niche is real estate. See `docs/business/niches.md`.
 
@@ -75,23 +67,6 @@ PYTHONPATH=src python -m autobots.outreach.message_generator
 The repo preserves previous work in two groups:
 
 - Google Maps scraping and sales pipeline logic from the old lead generation project.
-- n8n, Evolution API, Telegram, Notion, and AI workflow context from the previous WhatsApp responder project.
+- n8n, Evolution API, Telegram, Notion, and AI workflow context from the previous WhatsApp responder project, but now i have total control over the code and does not need to be private.
 
-That context is valuable, but this project should present the offer as business outcomes, not implementation tools.
 
-## Do Not Commit
-
-Never commit:
-
-- `.env` files
-- API keys or tokens
-- Evolution API keys
-- Telegram bot tokens
-- Notion tokens
-- WhatsApp QR/session data
-- n8n local state
-- browser profiles, cookies, or Playwright auth state
-- generated SQLite databases or raw scraped exports unless intentionally reviewed
-
-Use `.env.example` for placeholders only.
->>>>>>> ec7b4b0 (This is the first commit of this project, i will try to use the following tools: n8n, python, evolutionAPI, to create an idea that an AI told me that could be a great project for my portfile)
