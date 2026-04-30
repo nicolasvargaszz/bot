@@ -1,9 +1,9 @@
-<<<<<<< HEAD
-# bots 
-=======
-# Autobots
 
-Autobots is an automation agency codebase for WhatsApp lead filtering, CRM organization, and human handoff systems for local businesses in Paraguay.
+# bots 
+
+
+
+This code is an automation agency codebase for WhatsApp lead filtering, CRM organization, and human handoff systems for local businesses in Paraguay, the idea come up after doing a similar work to one specific company.
 
 ## Core idea
 
