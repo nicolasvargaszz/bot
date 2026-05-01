@@ -1,0 +1,49 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
+
+# Local data outputs
+*.db
+*.sqlite
+*.sqlite3
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Browser/session state
+playwright/.auth/
+browser_profiles/
+user_data_dir/
+storage_state.json
+
+# n8n/Evolution local state
+n8n/.n8n/
+n8n_data/
+evolution_instances/
+evolution_store/
+postgres_data/
+redis_data/
+
+# Generated exports
+*.xlsx
+*.csv
+*.log
