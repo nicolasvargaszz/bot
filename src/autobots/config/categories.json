@@ -1,0 +1,624 @@
+{
+    "restaurant": {
+        "name": "Restaurant",
+        "name_es": "Restaurante",
+        "google_search_terms": [
+            "restaurantes",
+            "comida",
+            "restaurant",
+            "food"
+        ],
+        "conversion_weight": 1.2,
+        "default_template": "restaurant/modern-food",
+        "suggested_services": [
+            "Comida para llevar",
+            "Servicio a domicilio",
+            "Reservaciones",
+            "Eventos privados",
+            "Menú del día"
+        ]
+    },
+    "cafe": {
+        "name": "Café",
+        "name_es": "Cafetería",
+        "google_search_terms": [
+            "cafetería",
+            "café",
+            "coffee shop",
+            "coffee"
+        ],
+        "conversion_weight": 1.1,
+        "default_template": "restaurant/cafe-style",
+        "suggested_services": [
+            "Café de especialidad",
+            "Repostería artesanal",
+            "WiFi gratis",
+            "Espacio para trabajar",
+            "Servicio a domicilio"
+        ]
+    },
+    "salon": {
+        "name": "Hair Salon",
+        "name_es": "Salón de Belleza",
+        "google_search_terms": [
+            "salón de belleza",
+            "estética",
+            "peluquería",
+            "hair salon",
+            "beauty salon"
+        ],
+        "conversion_weight": 1.3,
+        "default_template": "salon/beauty-minimal",
+        "suggested_services": [
+            "Corte de cabello",
+            "Tintes y mechas",
+            "Peinados para eventos",
+            "Manicure y pedicure",
+            "Tratamientos capilares"
+        ]
+    },
+    "barber": {
+        "name": "Barber Shop",
+        "name_es": "Barbería",
+        "google_search_terms": [
+            "barbería",
+            "barber shop",
+            "barber"
+        ],
+        "conversion_weight": 1.2,
+        "default_template": "salon/barber-bold",
+        "suggested_services": [
+            "Corte de cabello",
+            "Afeitado clásico",
+            "Arreglo de barba",
+            "Tratamientos faciales",
+            "Corte para niños"
+        ]
+    },
+    "dental": {
+        "name": "Dental Clinic",
+        "name_es": "Clínica Dental",
+        "google_search_terms": [
+            "dentista",
+            "clínica dental",
+            "dental",
+            "odontología"
+        ],
+        "conversion_weight": 1.4,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Limpieza dental",
+            "Blanqueamiento",
+            "Ortodoncia",
+            "Implantes dentales",
+            "Urgencias dentales"
+        ]
+    },
+    "medical": {
+        "name": "Medical Clinic",
+        "name_es": "Clínica Médica",
+        "google_search_terms": [
+            "clínica médica",
+            "médico",
+            "doctor",
+            "consultorio"
+        ],
+        "conversion_weight": 1.3,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Consulta general",
+            "Especialidades médicas",
+            "Estudios de laboratorio",
+            "Urgencias",
+            "Certificados médicos"
+        ]
+    },
+    "automotive": {
+        "name": "Auto Shop",
+        "name_es": "Taller Mecánico",
+        "google_search_terms": [
+            "taller mecánico",
+            "mecánico",
+            "automotriz",
+            "auto shop",
+            "taller"
+        ],
+        "conversion_weight": 1.1,
+        "default_template": "services/automotive",
+        "suggested_services": [
+            "Servicio de mantenimiento",
+            "Reparación de motor",
+            "Frenos y suspensión",
+            "Diagnóstico computarizado",
+            "Hojalatería y pintura"
+        ]
+    },
+    "retail": {
+        "name": "Retail Store",
+        "name_es": "Tienda",
+        "google_search_terms": [
+            "tienda",
+            "boutique",
+            "store",
+            "comercio"
+        ],
+        "conversion_weight": 1.0,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Productos de calidad",
+            "Atención personalizada",
+            "Envíos a domicilio",
+            "Apartado disponible",
+            "Garantía en productos"
+        ]
+    },
+    "gym": {
+        "name": "Gym",
+        "name_es": "Gimnasio",
+        "google_search_terms": [
+            "gimnasio",
+            "gym",
+            "fitness",
+            "entrenamiento"
+        ],
+        "conversion_weight": 1.0,
+        "default_template": "services/home-services",
+        "suggested_services": [
+            "Área de pesas",
+            "Clases grupales",
+            "Entrenamiento personal",
+            "Cardio",
+            "Nutrición deportiva"
+        ]
+    },
+    "veterinary": {
+        "name": "Veterinary",
+        "name_es": "Veterinaria",
+        "google_search_terms": [
+            "veterinaria",
+            "veterinario",
+            "clínica veterinaria",
+            "mascotas"
+        ],
+        "conversion_weight": 1.2,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Consulta general",
+            "Vacunación",
+            "Cirugías",
+            "Estética canina",
+            "Urgencias 24/7"
+        ]
+    },
+    "bakery": {
+        "name": "Bakery",
+        "name_es": "Panadería",
+        "google_search_terms": [
+            "panadería",
+            "bakery",
+            "pastelería",
+            "pan"
+        ],
+        "conversion_weight": 1.1,
+        "default_template": "restaurant/cafe-style",
+        "suggested_services": [
+            "Pan recién horneado",
+            "Pasteles personalizados",
+            "Pedidos para eventos",
+            "Pan dulce tradicional",
+            "Café y bebidas"
+        ]
+    },
+    "real_estate": {
+        "name": "Real Estate",
+        "name_es": "Inmobiliaria",
+        "google_search_terms": [
+            "inmobiliaria",
+            "bienes raíces",
+            "real estate",
+            "casas en venta"
+        ],
+        "conversion_weight": 1.5,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Venta de propiedades",
+            "Renta de inmuebles",
+            "Avalúos",
+            "Asesoría legal",
+            "Administración de propiedades"
+        ]
+    },
+    "legal": {
+        "name": "Law Firm",
+        "name_es": "Despacho Legal",
+        "google_search_terms": [
+            "abogado",
+            "despacho legal",
+            "notaría",
+            "lawyer"
+        ],
+        "conversion_weight": 1.4,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Derecho civil",
+            "Derecho familiar",
+            "Derecho mercantil",
+            "Asesoría legal",
+            "Trámites notariales"
+        ]
+    },
+    "spa": {
+        "name": "Spa",
+        "name_es": "Spa",
+        "google_search_terms": [
+            "spa",
+            "masajes",
+            "relajación",
+            "wellness"
+        ],
+        "conversion_weight": 1.3,
+        "default_template": "salon/beauty-minimal",
+        "suggested_services": [
+            "Masajes relajantes",
+            "Tratamientos faciales",
+            "Aromaterapia",
+            "Exfoliación corporal",
+            "Paquetes de día"
+        ]
+    },
+    "florist": {
+        "name": "Florist",
+        "name_es": "Florería",
+        "google_search_terms": [
+            "florería",
+            "flores",
+            "florist",
+            "arreglos florales"
+        ],
+        "conversion_weight": 1.0,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Arreglos florales",
+            "Ramos para eventos",
+            "Decoración floral",
+            "Envío a domicilio",
+            "Plantas de interior"
+        ]
+    },
+    "tire_shop": {
+        "name": "Tire Shop",
+        "name_es": "Gomería",
+        "google_search_terms": [
+            "gomería",
+            "gomas",
+            "neumáticos",
+            "llantas",
+            "cambio de gomas"
+        ],
+        "conversion_weight": 1.1,
+        "default_template": "services/automotive",
+        "suggested_services": [
+            "Venta de neumáticos",
+            "Cambio de gomas",
+            "Balanceo y alineación",
+            "Reparación de pinchazos",
+            "Neumáticos nuevos y usados"
+        ]
+    },
+    "window_tinting": {
+        "name": "Window Tinting",
+        "name_es": "Polarizados",
+        "google_search_terms": [
+            "polarizados",
+            "polarizado de autos",
+            "window tinting",
+            "láminas de seguridad"
+        ],
+        "conversion_weight": 1.1,
+        "default_template": "services/automotive",
+        "suggested_services": [
+            "Polarizado automotriz",
+            "Polarizado residencial",
+            "Láminas de seguridad",
+            "Protección UV",
+            "Garantía en instalación"
+        ]
+    },
+    "car_detailing": {
+        "name": "Car Detailing",
+        "name_es": "Detailing / Lavadero de Autos",
+        "google_search_terms": [
+            "detailing",
+            "car detailing",
+            "lavadero de autos",
+            "lavado de autos",
+            "limpieza automotriz"
+        ],
+        "conversion_weight": 1.0,
+        "default_template": "services/automotive",
+        "suggested_services": [
+            "Lavado completo",
+            "Detailing interior",
+            "Pulido y encerado",
+            "Limpieza de tapizados",
+            "Tratamiento cerámico"
+        ]
+    },
+    "motorcycle_parts": {
+        "name": "Motorcycle Parts",
+        "name_es": "Repuestos de Motos",
+        "google_search_terms": [
+            "repuestos de motos",
+            "accesorios para motos",
+            "venta de repuestos motos",
+            "motorepuestos"
+        ],
+        "conversion_weight": 1.0,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Repuestos originales",
+            "Accesorios para motos",
+            "Lubricantes y aceites",
+            "Cascos y equipamiento",
+            "Instalación de accesorios"
+        ]
+    },
+    "car_rental": {
+        "name": "Car Rental",
+        "name_es": "Alquiler de Vehículos",
+        "google_search_terms": [
+            "alquiler de autos",
+            "rent a car",
+            "alquiler de vehículos",
+            "renta de autos"
+        ],
+        "conversion_weight": 1.2,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Alquiler diario y semanal",
+            "Vehículos con chofer",
+            "Traslados al aeropuerto",
+            "Flota de vehículos nuevos",
+            "Seguro incluido"
+        ]
+    },
+    "event_venue": {
+        "name": "Event Venue",
+        "name_es": "Salón de Eventos",
+        "google_search_terms": [
+            "salón de eventos",
+            "salón de fiestas",
+            "eventos",
+            "quinceañeras",
+            "bodas"
+        ],
+        "conversion_weight": 1.3,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Salón climatizado",
+            "Catering incluido",
+            "Decoración personalizada",
+            "Sonido e iluminación",
+            "Estacionamiento privado"
+        ]
+    },
+    "party_rental": {
+        "name": "Party Rental",
+        "name_es": "Alquiler de Sillas y Mesas",
+        "google_search_terms": [
+            "alquiler de sillas",
+            "alquiler de mesas",
+            "alquiler para eventos",
+            "mobiliario para fiestas"
+        ],
+        "conversion_weight": 1.0,
+        "default_template": "services/home-services",
+        "suggested_services": [
+            "Sillas y mesas",
+            "Manteles y decoración",
+            "Vajilla y cristalería",
+            "Carpas y toldos",
+            "Entrega y retiro incluido"
+        ]
+    },
+    "catering": {
+        "name": "Catering",
+        "name_es": "Servicio de Catering",
+        "google_search_terms": [
+            "catering",
+            "servicio de catering",
+            "confitería",
+            "lunch para eventos",
+            "comida para fiestas"
+        ],
+        "conversion_weight": 1.2,
+        "default_template": "restaurant/modern-food",
+        "suggested_services": [
+            "Menús personalizados",
+            "Servicio completo",
+            "Mozos profesionales",
+            "Bocaditos y canapés",
+            "Tortas y postres"
+        ]
+    },
+    "daycare": {
+        "name": "Daycare",
+        "name_es": "Guardería / Jardín de Infantes",
+        "google_search_terms": [
+            "guardería",
+            "jardín de infantes",
+            "maternal",
+            "cuidado de niños",
+            "pre-escolar"
+        ],
+        "conversion_weight": 1.3,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Cuidado diario",
+            "Estimulación temprana",
+            "Personal capacitado",
+            "Alimentación incluida",
+            "Horario extendido"
+        ]
+    },
+    "driving_school": {
+        "name": "Driving School",
+        "name_es": "Escuela de Manejo",
+        "google_search_terms": [
+            "escuela de manejo",
+            "autoescuela",
+            "clases de manejo",
+            "licencia de conducir"
+        ],
+        "conversion_weight": 1.1,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Clases teóricas",
+            "Clases prácticas",
+            "Vehículos con doble comando",
+            "Trámites de licencia",
+            "Horarios flexibles"
+        ]
+    },
+    "senior_residence": {
+        "name": "Senior Residence",
+        "name_es": "Residencia de Adultos Mayores",
+        "google_search_terms": [
+            "residencia adultos mayores",
+            "hogar de ancianos",
+            "geriátrico",
+            "casa de reposo"
+        ],
+        "conversion_weight": 1.4,
+        "default_template": "services/professional",
+        "suggested_services": [
+            "Atención 24/7",
+            "Personal médico",
+            "Actividades recreativas",
+            "Alimentación especializada",
+            "Habitaciones privadas"
+        ]
+    },
+    "clothing_store": {
+        "name": "Clothing Store",
+        "name_es": "Tienda de Ropa",
+        "google_search_terms": [
+            "tienda de ropa",
+            "ropa",
+            "boutique de ropa",
+            "moda",
+            "indumentaria",
+            "clothing store",
+            "fashion"
+        ],
+        "conversion_weight": 1.5,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Ropa de moda",
+            "Colecciones exclusivas",
+            "Envío a domicilio",
+            "Apartado disponible",
+            "Personal shopper"
+        ]
+    },
+    "shoes_store": {
+        "name": "Shoe Store",
+        "name_es": "Zapatería",
+        "google_search_terms": [
+            "zapatería",
+            "zapatos",
+            "calzados",
+            "shoe store",
+            "tienda de calzado"
+        ],
+        "conversion_weight": 1.3,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Calzado de calidad",
+            "Todas las tallas",
+            "Marcas exclusivas",
+            "Reparación de calzado",
+            "Accesorios"
+        ]
+    },
+    "jewelry_store": {
+        "name": "Jewelry Store",
+        "name_es": "Joyería",
+        "google_search_terms": [
+            "joyería",
+            "joyas",
+            "jewelry",
+            "accesorios",
+            "bijouterie"
+        ],
+        "conversion_weight": 1.4,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Joyas finas",
+            "Reparación de joyas",
+            "Grabados personalizados",
+            "Diseños exclusivos",
+            "Anillos de compromiso"
+        ]
+    },
+    "electronics_store": {
+        "name": "Electronics Store",
+        "name_es": "Tienda de Electrónica",
+        "google_search_terms": [
+            "electrónica",
+            "celulares",
+            "tecnología",
+            "computadoras",
+            "electronics"
+        ],
+        "conversion_weight": 1.4,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Celulares y tablets",
+            "Accesorios tecnológicos",
+            "Reparación de equipos",
+            "Garantía extendida",
+            "Asesoría técnica"
+        ]
+    },
+    "furniture_store": {
+        "name": "Furniture Store",
+        "name_es": "Mueblería",
+        "google_search_terms": [
+            "mueblería",
+            "muebles",
+            "furniture",
+            "decoración del hogar",
+            "amoblamientos"
+        ],
+        "conversion_weight": 1.3,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Muebles de calidad",
+            "Diseño personalizado",
+            "Entrega e instalación",
+            "Financiamiento disponible",
+            "Decoración integral"
+        ]
+    },
+    "sports_store": {
+        "name": "Sports Store",
+        "name_es": "Tienda Deportiva",
+        "google_search_terms": [
+            "tienda deportiva",
+            "deportes",
+            "sports",
+            "ropa deportiva",
+            "artículos deportivos"
+        ],
+        "conversion_weight": 1.2,
+        "default_template": "retail/boutique",
+        "suggested_services": [
+            "Equipamiento deportivo",
+            "Ropa deportiva",
+            "Calzado especializado",
+            "Suplementos",
+            "Accesorios fitness"
+        ]
+    }
+}

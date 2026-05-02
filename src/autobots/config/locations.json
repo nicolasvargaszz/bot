@@ -1,0 +1,208 @@
+{
+    "country": "Paraguay",
+    "target_region": "Gran Asunción y Central",
+    "cities": [
+        {
+            "name": "Asunción",
+            "department": "Capital",
+            "latitude": -25.2637,
+            "longitude": -57.5759,
+            "tier": 1,
+            "population": 525000,
+            "zones": [
+                {
+                    "name": "Centro Histórico",
+                    "key": "asuncion_centro",
+                    "latitude": -25.2829,
+                    "longitude": -57.6352,
+                    "radius_km": 3
+                },
+                {
+                    "name": "Villa Morra",
+                    "key": "villa_morra",
+                    "latitude": -25.2916,
+                    "longitude": -57.5802,
+                    "radius_km": 2
+                },
+                {
+                    "name": "Carmelitas",
+                    "key": "carmelitas",
+                    "latitude": -25.2858,
+                    "longitude": -57.5713,
+                    "radius_km": 2
+                },
+                {
+                    "name": "Recoleta",
+                    "key": "recoleta",
+                    "latitude": -25.2783,
+                    "longitude": -57.6025,
+                    "radius_km": 2
+                },
+                {
+                    "name": "San Roque",
+                    "key": "san_roque",
+                    "latitude": -25.2700,
+                    "longitude": -57.6200,
+                    "radius_km": 2
+                },
+                {
+                    "name": "Sajonia",
+                    "key": "sajonia",
+                    "latitude": -25.2600,
+                    "longitude": -57.6400,
+                    "radius_km": 2
+                },
+                {
+                    "name": "Manorá",
+                    "key": "manora",
+                    "latitude": -25.3100,
+                    "longitude": -57.5700,
+                    "radius_km": 2
+                },
+                {
+                    "name": "Las Mercedes",
+                    "key": "las_mercedes",
+                    "latitude": -25.2950,
+                    "longitude": -57.5900,
+                    "radius_km": 2
+                }
+            ]
+        },
+        {
+            "name": "San Lorenzo",
+            "department": "Central",
+            "latitude": -25.3397,
+            "longitude": -57.5092,
+            "tier": 2,
+            "population": 280000,
+            "zones": [
+                {
+                    "name": "Centro San Lorenzo",
+                    "key": "san_lorenzo_centro",
+                    "latitude": -25.3397,
+                    "longitude": -57.5092,
+                    "radius_km": 4
+                }
+            ]
+        },
+        {
+            "name": "Luque",
+            "department": "Central",
+            "latitude": -25.2700,
+            "longitude": -57.4872,
+            "tier": 2,
+            "population": 270000,
+            "zones": [
+                {
+                    "name": "Centro Luque",
+                    "key": "luque_centro",
+                    "latitude": -25.2700,
+                    "longitude": -57.4872,
+                    "radius_km": 4
+                }
+            ]
+        },
+        {
+            "name": "Lambaré",
+            "department": "Central",
+            "latitude": -25.3500,
+            "longitude": -57.6064,
+            "tier": 2,
+            "population": 170000,
+            "zones": [
+                {
+                    "name": "Centro Lambaré",
+                    "key": "lambare_centro",
+                    "latitude": -25.3500,
+                    "longitude": -57.6064,
+                    "radius_km": 3
+                }
+            ]
+        },
+        {
+            "name": "Fernando de la Mora",
+            "department": "Central",
+            "latitude": -25.3200,
+            "longitude": -57.5500,
+            "tier": 2,
+            "population": 160000,
+            "zones": [
+                {
+                    "name": "Centro Fernando",
+                    "key": "fernando_centro",
+                    "latitude": -25.3200,
+                    "longitude": -57.5500,
+                    "radius_km": 3
+                }
+            ]
+        },
+        {
+            "name": "Mariano Roque Alonso",
+            "department": "Central",
+            "latitude": -25.1833,
+            "longitude": -57.5333,
+            "tier": 2,
+            "population": 130000,
+            "zones": [
+                {
+                    "name": "Centro MRA",
+                    "key": "mra_centro",
+                    "latitude": -25.1833,
+                    "longitude": -57.5333,
+                    "radius_km": 3
+                }
+            ]
+        },
+        {
+            "name": "Capiatá",
+            "department": "Central",
+            "latitude": -25.3547,
+            "longitude": -57.4450,
+            "tier": 3,
+            "population": 250000,
+            "zones": [
+                {
+                    "name": "Centro Capiatá",
+                    "key": "capiata_centro",
+                    "latitude": -25.3547,
+                    "longitude": -57.4450,
+                    "radius_km": 4
+                }
+            ]
+        },
+        {
+            "name": "Ñemby",
+            "department": "Central",
+            "latitude": -25.3933,
+            "longitude": -57.5353,
+            "tier": 3,
+            "population": 130000,
+            "zones": [
+                {
+                    "name": "Centro Ñemby",
+                    "key": "nemby_centro",
+                    "latitude": -25.3933,
+                    "longitude": -57.5353,
+                    "radius_km": 3
+                }
+            ]
+        }
+    ],
+    "search_config": {
+        "categories_priority": [
+            "salon",
+            "restaurant",
+            "dental",
+            "barber",
+            "automotive",
+            "cafe",
+            "veterinary",
+            "bakery",
+            "retail",
+            "gym"
+        ],
+        "max_results_per_search": 60,
+        "delay_between_searches_ms": 3000,
+        "language": "es"
+    }
+}
