@@ -28,6 +28,8 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+data/legacy/*
+!data/legacy/.gitkeep
 
 # Browser/session state
 playwright/.auth/
