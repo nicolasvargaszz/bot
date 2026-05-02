@@ -2,10 +2,6 @@
 
 Autobots has two useful legacy foundations: a lead discovery pipeline and a WhatsApp/n8n response automation. The current refactor keeps both, but separates them into clear responsibilities.
 
-Detailed architecture documents:
-
-- `docs/architecture/message-buffer-and-ai-flow.md` - Redis message buffer, transcription, AI response, CRM, and handoff flow.
-
 ## Lead Discovery
 
 `src/autobots/scrapers/google_maps.py` scrapes Google Maps businesses in Paraguay and extracts details such as name, phone, category, address, website status, ratings, reviews, photos, hours, and metadata.
@@ -41,7 +37,3 @@ Deployment uses `docker-compose.yml` with environment variables. Real values bel
 ## Current Boundary
 
 This repo is organized for safe preparation. Outbound WhatsApp automation is not implemented here yet.
-
-Just document and the strategy to build the automatization agency.
-
-I think this project can be a greate oportunity to create a AaaS
