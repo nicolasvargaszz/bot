@@ -70,3 +70,9 @@ The repo preserves previous work in two groups:
 - n8n, Evolution API, Telegram, Notion, and AI workflow context from the previous WhatsApp responder project, but now i have total control over the code and does not need to be private.
 
 
+## AI tools that helped me to do this project are: 
+- Codex 5.5 extended thinking (almost all the time)
+- Claude Sonnet 4.7
+
+
+
