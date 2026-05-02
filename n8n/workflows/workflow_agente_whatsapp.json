@@ -1,0 +1,1026 @@
+{
+  "name": "Agente WhatsApp PoC",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campana",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        360
+      ],
+      "webhookId": "campana-webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "noData",
+        "options": {}
+      },
+      "id": "respond-immediately",
+      "name": "Respond Immediately",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-celular",
+              "name": "celular",
+              "value": "={{ $json.body?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "field-mensaje",
+              "name": "mensaje",
+              "value": "={{ $json.body?.data?.message?.conversation ?? $json.body?.data?.message?.extendedTextMessage?.text ?? ($json.body?.data?.message?.audioMessage ? '__VOICE_NOTE__' : '') }}",
+              "type": "string"
+            },
+            {
+              "id": "field-fromMe",
+              "name": "fromMe",
+              "value": "={{ $json.body?.data?.key?.fromMe ?? false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "field-isGroup",
+              "name": "isGroup",
+              "value": "={{ ($json.body?.data?.key?.remoteJid ?? '').endsWith('@g.us') }}",
+              "type": "boolean"
+            },
+            {
+              "id": "field-sessionId",
+              "name": "sessionId",
+              "value": "={{ 'campana:' + ($json.body?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') ?? '') }}",
+              "type": "string"
+            },
+            {
+              "id": "field-isVoice",
+              "name": "isVoice",
+              "value": "={{ !!$json.body?.data?.message?.audioMessage }}",
+              "type": "boolean"
+            },
+            {
+              "id": "field-message-id",
+              "name": "messageId",
+              "value": "={{ $json.body?.data?.key?.id ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "field-audio-mime",
+              "name": "audioMimeType",
+              "value": "={{ $json.body?.data?.message?.audioMessage?.mimetype ?? 'audio/ogg; codecs=opus' }}",
+              "type": "string"
+            },
+            {
+              "id": "field-is-ptt",
+              "name": "isPtt",
+              "value": "={{ !!$json.body?.data?.message?.audioMessage?.ptt }}",
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-fields",
+      "name": "Set Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-fromMe",
+              "leftValue": "={{ $json.fromMe }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition-isGroup",
+              "leftValue": "={{ $json.isGroup }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition-mensaje",
+              "leftValue": "={{ $json.mensaje }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            },
+            {
+              "id": "condition-numero",
+              "leftValue": "={{ $json.celular }}",
+              "rightValue": "595XXXXXXXXX",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-filtro",
+      "name": "IF Filtro",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        760,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.messageBuffer) {\n  staticData.messageBuffer = {};\n}\n\nconst key = $json.sessionId || `campana:${$json.celular}`;\nconst now = Date.now();\nconst mergeWindowMs = 10000;\nconst staleWindowMs = 120000;\n\nconst entry = staticData.messageBuffer[key] || {\n  messages: [],\n  latestToken: null,\n  updatedAt: 0,\n};\n\nif (now - entry.updatedAt > staleWindowMs) {\n  entry.messages = [];\n}\n\nconst isVoice = $json.isVoice === true;\nconst text = String($json.mensaje || '').trim();\n\nif (isVoice || text) {\n  entry.messages.push({\n    type: isVoice ? 'voice' : 'text',\n    text: isVoice ? '' : text,\n    ts: now,\n    messageId: $json.messageId || '',\n    mimeType: $json.audioMimeType || '',\n    isPtt: $json.isPtt === true,\n  });\n}\n\nentry.messages = entry.messages.filter((message) => now - message.ts <= mergeWindowMs);\nentry.updatedAt = now;\nentry.latestToken = `${now}-${Math.random().toString(36).slice(2, 10)}`;\nstaticData.messageBuffer[key] = entry;\n\nreturn [{\n  json: {\n    ...$json,\n    batch_token: entry.latestToken,\n    batch_window_ms: mergeWindowMs,\n  },\n}];"
+      },
+      "id": "debounce-buffer",
+      "name": "Debounce Buffer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "wait-batch",
+      "name": "Wait Batch",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1240,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst key = $json.sessionId || `campana:${$json.celular}`;\nconst entry = staticData.messageBuffer?.[key];\n\nif (!entry || entry.latestToken !== $json.batch_token) {\n  return [{ json: { ...$json, should_process_batch: false } }];\n}\n\nconst messages = (entry.messages || []).slice().sort((a, b) => a.ts - b.ts);\nconst textMessages = messages.filter((message) => message.type === 'text');\nconst voiceMessages = messages.filter((message) => message.type === 'voice' && message.messageId);\nconst latestVoice = voiceMessages.length ? voiceMessages[voiceMessages.length - 1] : null;\nconst mergedText = textMessages\n  .map((message) => String(message.text || '').trim())\n  .filter(Boolean)\n  .join(' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\ndelete staticData.messageBuffer[key];\n\nreturn [{\n  json: {\n    ...$json,\n    mensaje: mergedText,\n    should_process_batch: true,\n    has_voice: voiceMessages.length > 0,\n    is_voice_only: voiceMessages.length > 0 && !mergedText,\n    audio_message_id: latestVoice?.messageId || '',\n    audio_mime_type: latestVoice?.mimeType || $json.audioMimeType || 'audio/ogg; codecs=opus',\n    audio_is_ptt: latestVoice?.isPtt === true,\n    batch_size: messages.length,\n  },\n}];"
+      },
+      "id": "resolve-batch",
+      "name": "Resolve Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-process-batch",
+              "leftValue": "={{ $json.should_process_batch }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-procesar-batch",
+      "name": "IF Procesar Batch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1720,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-has-audio",
+              "leftValue": "={{ $json.has_voice }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-tiene-audio",
+      "name": "IF Tiene Audio",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1960,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=Sos parte del equipo de comunicación de Pedro Halley Merlo, candidato a Concejal de Asunción 2026 por Colorado Añetete.\n\n## QUIÉN ES PEDRO HALLEY MERLO\n- Abogado con 40 años de servicio público\n- 25 años trabajando en el IPS (Instituto de Previsión Social)\n- Ex Gerente de Prestaciones Económicas del IPS\n- Presidente de la Unión Nacional de Jubilados del Paraguay (UNJPY)\n- Reconocimientos internacionales: Premio OISS México 2007, Premio CISS Ginebra 2020, Distinción de la Embajada de EEUU 2021\n- Autor de libros sobre seguridad social\n- Lema de campaña: \"Decencia, Capacidad y Coraje\"\n\n## TU ROL\nHablás con jubilados del IPS y adultos mayores de Asunción que recibieron un mensaje de presentación de la campaña. Pedro los conoce y los defiende hace años — tu comunicación debe reflejar esa cercanía. No sos un extraño, sos parte del equipo de alguien que viene luchando por ellos desde hace décadas.\n\n## TONO Y ESTILO\n- Español paraguayo natural: usá 'vos', decí 'con gusto', 'sin problema', 'te comento', 'dale', 'mirá'.\n- Cálido y respetuoso. Los jubilados aprecian la claridad y el trato digno.\n- Respuestas cortas y directas. Máximo 2-3 oraciones por mensaje.\n- Si no sabés algo específico: \"Dejame consultar con el equipo y te confirmo\".\n- NUNCA digas que sos una IA, bot o asistente virtual. Sos parte del equipo humano de Pedro.\n\n## PROPUESTAS CONCRETAS\n\n### 1. Restaurar la Confianza\n- Audiencias públicas barriales cada 15 días\n- Informes mensuales de gestión\n- Visitas directas al vecino\n\n### 2. Reducir el Endeudamiento Municipal\n- Eliminar el planillerismo (empleados fantasma)\n- Suprimir gastos innecesarios\n- Recuperar ingresos genuinos del municipio\n\n### 3. Asunción Segura y Amigable (especialmente para adultos mayores)\n- Plazas con refugios verdes para adultos mayores\n- Policía municipal preventiva\n- Paradas de colectivo seguras\n- Entrada libre a espectáculos municipales para mayores de 65 años\n- Transporte municipal sin costo para mayores de 70 años\n\n### 4. Autogestión Digital\n- App móvil para trámites municipales\n- Pago electrónico de tasas e impuestos\n- Ventanilla única para simplificar trámites\n\n### 5. Transparencia Radical\n- Portal de datos abiertos\n- Sesiones públicas de rendición de cuentas\n\n### 6. Sostenibilidad de la Caja Municipal\n- Auditorías trimestrales independientes\n\n## QUÉ NO PODÉS HACER (PROHIBIDO)\n- NUNCA pidas el voto directamente (\"votá por Pedro\", \"danos tu voto\")\n- NUNCA critiques a otros candidatos, partidos o a Nenecho\n- NUNCA inventes información. Si no sabés, derivá a humano.\n- NUNCA prometas cosas que Pedro no haya propuesto\n- NUNCA compartas datos personales de nadie\n\n## CUÁNDO ESCALAR A UN HUMANO\nIncluí ##DERIVAR_A_HUMANO## al final de tu respuesta cuando:\n- Preguntas muy específicas sobre fechas, lugares o montos que no tenés\n- El asociado está enojado, frustrado o hace reclamos fuertes\n- Pide hablar con Pedro directamente o con alguien específico\n- Menciona problemas urgentes de salud, pensión trabada o emergencias\n- La conversación se pone compleja, política o delicada\n- Preguntas sobre otros candidatos o comparaciones políticas\n\n## CUÁNDO REGISTRAR COMO LEAD\nIncluí ##REGISTRAR_LEAD## al final de tu respuesta cuando:\n- Dice que quiere ayudar, colaborar o apoyar la campaña\n- Pregunta cómo puede sumarse o participar\n- Pide material para compartir con familia, vecinos o amigos\n- Quiere coordinar una reunión, visita o encuentro con Pedro\n- Muestra entusiasmo genuino por las propuestas\n- Ofrece su casa, local o tiempo para actividades de campaña\n\n## EJEMPLOS\n\nUsuario: \"Hola, recibí un mensaje de ustedes\"\nVos: \"¡Hola! Sí, te escribimos del equipo de Pedro Halley. Gracias por responder. ¿En qué te puedo ayudar?\"\n\nUsuario: \"Quién es Pedro Halley?\"\nVos: \"Pedro es abogado, tiene 40 años de servicio público y fue 25 años funcionario del IPS. Es el presidente de la Unión Nacional de Jubilados. Ahora se presenta como candidato a concejal por Asunción para seguir defendiendo a los jubilados desde el municipio.\"\n\nUsuario: \"Qué van a hacer por los jubilados?\"\nVos: \"Mirá, hay varias propuestas concretas: entrada libre a espectáculos municipales para mayores de 65, transporte sin costo para mayores de 70, y plazas con refugios verdes pensadas para adultos mayores. ¿Te cuento más de alguna?\"\n\nUsuario: \"Quiero ayudar en la campaña\"\nVos: \"¡Qué bueno contar con tu apoyo! Le paso tus datos al equipo de coordinación para que te contacten. ¿Te parece bien? ##REGISTRAR_LEAD##\"\n\nUsuario: \"Estoy harto de que nadie haga nada por los jubilados\"\nVos: \"Te entiendo perfectamente, y por eso Pedro está en esta lucha hace años. Voy a pasar tu mensaje al equipo para que alguien te contacte y puedas conversar más en detalle. ##DERIVAR_A_HUMANO##\"\n\nUsuario: \"Qué opinan de Nenecho?\"\nVos: \"Nosotros nos enfocamos en nuestras propuestas y en lo que podemos hacer por Asunción. ¿Hay algo específico de nuestro plan que te gustaría conocer?\""
+        },
+        "promptType": "define",
+        "text": "={{ $json.mensaje }}"
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3160,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "model": "models/gemini-1.5-flash",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "gemini-model",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        3040,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Set Fields').item.json.sessionId }}"
+      },
+      "id": "memory",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [
+        3280,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst output = String(input.output || '');\n\nconst shouldEscalate = output.includes('##DERIVAR_A_HUMANO##');\nconst shouldRegister = output.includes('##REGISTRAR_LEAD##');\n\nconst textoLimpio = output\n  .replace(/##DERIVAR_A_HUMANO##/g, '')\n  .replace(/##REGISTRAR_LEAD##/g, '')\n  .trim() || 'Gracias por tu mensaje. ¿Te gustaría que te cuente una propuesta concreta de Pedro Halley para jubilados?';\n\nconst base = Math.floor(Math.random() * (8000 - 2500) + 2500);\nconst typing = textoLimpio.length * 38;\nconst delayMs = Math.min(base + typing, 18000);\nconst delayS = Math.max(1, Math.ceil(delayMs / 1000));\n\nreturn [{\n  json: {\n    celular: input.celular ?? $('Set Fields').item.json.celular,\n    mensaje: input.mensaje ?? $('Set Fields').item.json.mensaje,\n    respuesta_texto: textoLimpio,\n    delay_ms: delayMs,\n    delay_s: delayS,\n    should_escalate: shouldEscalate,\n    should_register: shouldRegister,\n  },\n}];"
+      },
+      "id": "code-delay",
+      "name": "Code Delay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const delayMs = 2500;\n\nreturn [{\n  json: {\n    celular: $json.celular ?? $('Resolve Batch').item.json.celular,\n    mensaje: $json.mensaje ?? $('Resolve Batch').item.json.mensaje ?? '[audio]',\n    respuesta_texto: 'Entiendo tu mensaje. Si querés, te cuento propuestas concretas de Pedro Halley para jubilados y adultos mayores.',\n    delay_ms: delayMs,\n    delay_s: Math.max(1, Math.ceil(delayMs / 1000)),\n    should_escalate: false,\n    should_register: false,\n  },\n}];"
+      },
+      "id": "code-audio-fallback",
+      "name": "Code Audio Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delay_s }}",
+        "unit": "seconds"
+      },
+      "id": "wait",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-escalate",
+              "leftValue": "={{ $json.should_escalate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-escalar",
+      "name": "IF Escalar",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "TU_CHAT_ID_TELEGRAM",
+        "text": "=🔔 *Conversación escalada a humano*\n\n*Número:* {{ $json.celular }}\n*Mensaje del asociado:* {{ $json.mensaje }}\n\n_Respuesta que iba a enviar el bot (no enviada):_\n{{ $json.respuesta_texto }}\n\n_Respondé directamente al número por WhatsApp._",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-handoff",
+      "name": "Telegram Handoff",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4120,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8080/chat/updatePresence/campana-slot2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  number: $('IF Escalar').item.json.celular,\n  presence: 'composing',\n} }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "evolution-presence",
+      "name": "Escribiendo...",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4120,
+        580
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "wait-typing",
+      "name": "Wait Typing",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4360,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8080/message/sendText/campana-slot2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  number: $('IF Escalar').item.json.celular,\n  text: $('IF Escalar').item.json.respuesta_texto,\n} }}",
+        "options": {}
+      },
+      "id": "evolution-send",
+      "name": "Evolution API Send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4600,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8080/chat/getBase64FromMediaMessage/campana-slot2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"key\": {\n      \"id\": \"{{ $json.audio_message_id }}\"\n    }\n  },\n  \"convertToMp4\": false\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "download-audio-base64",
+      "name": "Descargar Audio Base64",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        120
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const batch = $('Resolve Batch').item.json;\nconst response = $input.first().json || {};\nconst rawBase64 = response.base64 || response.data?.base64 || response.response?.base64 || '';\nconst cleanBase64 = String(rawBase64).replace(/^data:.*?;base64,/, '').trim();\nconst mimeType = response.mimetype || response.mimeType || batch.audio_mime_type || 'audio/ogg; codecs=opus';\nconst extensionMap = {\n  'audio/ogg': 'ogg',\n  'audio/ogg; codecs=opus': 'ogg',\n  'audio/opus': 'opus',\n  'audio/mpeg': 'mp3',\n  'audio/mp3': 'mp3',\n  'audio/mp4': 'mp4',\n  'audio/aac': 'aac',\n  'audio/wav': 'wav',\n  'audio/x-wav': 'wav',\n  'audio/webm': 'webm',\n};\nconst normalizedMimeType = String(mimeType).split(';')[0].trim() || 'audio/ogg';\nconst extension = extensionMap[String(mimeType).trim()] || extensionMap[normalizedMimeType] || 'ogg';\n\nconst item = {\n  json: {\n    ...batch,\n    stt_ready: Boolean(cleanBase64),\n    stt_provider: 'openai-whisper',\n    stt_source_mime_type: mimeType,\n  },\n};\n\nif (cleanBase64) {\n  item.binary = {\n    data: {\n      data: cleanBase64,\n      mimeType: normalizedMimeType,\n      fileName: `audio-${batch.audio_message_id || Date.now()}.${extension}`,\n      fileExtension: extension,\n    },\n  };\n}\n\nreturn [item];"
+      },
+      "id": "prepare-audio-binary",
+      "name": "Preparar Audio Binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "es"
+            },
+            {
+              "name": "response_format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "transcribe-audio-openai",
+      "name": "Transcribir Audio OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2680,
+        120
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const batch = $('Resolve Batch').item.json;\nconst prepared = $('Preparar Audio Binary').item.json;\nconst response = $input.first().json || {};\n\nconst rawTranscript = response.text || response.transcription || response.output_text || response.data?.text || '';\nconst transcript = String(rawTranscript || '').replace(/\\s+/g, ' ').trim();\nconst baseText = String(batch.mensaje || '').replace(/\\s+/g, ' ').trim();\nconst shouldUseAi = Boolean(baseText || transcript);\nconst mergedPrompt = [baseText, transcript].filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim();\n\nreturn [{\n  json: {\n    ...batch,\n    mensaje: mergedPrompt,\n    texto_transcrito: transcript,\n    stt_ok: Boolean(transcript),\n    stt_ready: prepared.stt_ready === true,\n    should_use_ai: shouldUseAi,\n    stt_provider: prepared.stt_provider || 'openai-whisper',\n    stt_error: response.error?.message || response.message || (!prepared.stt_ready ? 'audio_base64_missing' : ''),\n  },\n}];"
+      },
+      "id": "resolve-audio-stt",
+      "name": "Resolver Audio STT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2920,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-audio-use-ai",
+              "leftValue": "={{ $json.should_use_ai }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-audio-para-ai",
+      "name": "IF Audio Para AI",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3160,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# 1. Entrada y filtros\n\nEste bloque recibe el webhook y decide si el mensaje puede seguir.\n\n- responde el webhook al instante\n- normaliza datos\n- filtra `fromMe`, grupos y número permitido\n- manda el mensaje al buffer de debounce",
+        "height": 320,
+        "width": 1900,
+        "color": 5
+      },
+      "id": "6d2ac875-c387-4eed-97f9-d4f577bdea8c",
+      "name": "Nota Entrada",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# 2. Decisión de audio\n\nDespués del batch, el flujo se separa:\n\n- sin audio -> va directo al AI Agent\n- con audio -> entra a la rama STT",
+        "height": 220,
+        "width": 420,
+        "color": 4
+      },
+      "id": "a240616c-d114-4cb7-8bca-72242424afbe",
+      "name": "Nota Decision Audio",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# 3A. Rama audio / STT\n\nSolo corre si `has_voice = true`.\n\n1. baja el audio desde Evolution\n2. lo convierte a binario\n3. intenta transcribir con OpenAI\n4. si no sale texto útil, manda fallback",
+        "height": 260,
+        "width": 1320,
+        "color": 3
+      },
+      "id": "2f5ce9f5-dd09-41ca-9c37-afaaa9865672",
+      "name": "Nota Rama Audio",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# 3B. IA y memoria\n\nAcá entra:\n\n- texto normal\n- audio ya transcripto\n\nLuego calcula delay anti-ban antes de responder.",
+        "height": 320,
+        "width": 900,
+        "color": 6
+      },
+      "id": "cad93ba2-2c33-41a9-aad9-5c2f6323a58b",
+      "name": "Nota IA",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# 3C. Fallback de audio\n\nSi el audio no se puede transcribir o no devuelve texto útil, se usa esta salida corta para redirigir a propuestas de Pedro Halley.",
+        "height": 180,
+        "width": 420,
+        "color": 7
+      },
+      "id": "e3ee957b-79be-4e89-8fd0-910367ba11c8",
+      "name": "Nota Fallback",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3320,
+        170
+      ]
+    },
+    {
+      "parameters": {
+        "content": "# 4. Salida final\n\nEste bloque decide si escala o si responde por WhatsApp.\n\n- `IF Escalar` -> Telegram\n- si no escala -> `composing`\n- espera 2s\n- envía el texto final por Evolution",
+        "height": 600,
+        "width": 1240,
+        "color": 2
+      },
+      "id": "a9973d29-2910-4b80-a4cb-0c667df736a6",
+      "name": "Nota Salida",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3520,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Respond Immediately",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Immediately": {
+      "main": [
+        [
+          {
+            "node": "Set Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Fields": {
+      "main": [
+        [
+          {
+            "node": "IF Filtro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Filtro": {
+      "main": [
+        [
+          {
+            "node": "Debounce Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Debounce Buffer": {
+      "main": [
+        [
+          {
+            "node": "Wait Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Batch": {
+      "main": [
+        [
+          {
+            "node": "Resolve Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Batch": {
+      "main": [
+        [
+          {
+            "node": "IF Procesar Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Procesar Batch": {
+      "main": [
+        [
+          {
+            "node": "IF Tiene Audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Delay": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Audio Fallback": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "IF Escalar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Escalar": {
+      "main": [
+        [
+          {
+            "node": "Telegram Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escribiendo...",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escribiendo...": {
+      "main": [
+        [
+          {
+            "node": "Wait Typing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Typing": {
+      "main": [
+        [
+          {
+            "node": "Evolution API Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Tiene Audio": {
+      "main": [
+        [
+          {
+            "node": "Descargar Audio Base64",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Audio Base64": {
+      "main": [
+        [
+          {
+            "node": "Preparar Audio Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Audio Binary": {
+      "main": [
+        [
+          {
+            "node": "Transcribir Audio OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribir Audio OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Resolver Audio STT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolver Audio STT": {
+      "main": [
+        [
+          {
+            "node": "IF Audio Para AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Audio Para AI": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code Audio Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "campana-whatsapp-poc"
+  },
+  "tags": []
+}

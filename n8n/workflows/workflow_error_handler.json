@@ -1,0 +1,80 @@
+{
+  "name": "Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =============================================================\n// NODO CODE: FORMATEAR ERROR PARA TELEGRAM\n// Este workflow se ejecuta automáticamente cuando falla cualquier\n// nodo del workflow principal \"Agente WhatsApp PoC\"\n// =============================================================\n\nconst execution = $input.first().json.execution || {};\nconst workflow = $input.first().json.workflow || {};\n\n// Obtener información del error\nconst errorMessage = execution.error?.message || 'Error desconocido';\nconst errorNode = execution.error?.node?.name || 'Nodo desconocido';\nconst workflowName = workflow.name || 'Workflow desconocido';\nconst executionId = execution.id || 'N/A';\n\n// Intentar extraer el número de celular del contexto de ejecución\nlet celular = 'No disponible';\ntry {\n  const data = execution.data?.resultData?.runData;\n  if (data) {\n    // Buscar en Set Fields\n    if (data['Set Fields']) {\n      celular = data['Set Fields'][0]?.data?.main?.[0]?.[0]?.json?.celular || celular;\n    }\n    // Buscar en Webhook Trigger como fallback\n    if (celular === 'No disponible' && data['Webhook Trigger']) {\n      const webhookData = data['Webhook Trigger'][0]?.data?.main?.[0]?.[0]?.json;\n      celular = webhookData?.body?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') || celular;\n    }\n  }\n} catch (e) {\n  celular = 'Error extrayendo número';\n}\n\n// Formatear mensaje para Telegram\nconst mensaje = `🚨 *ERROR EN WORKFLOW*\n\n*Workflow:* ${workflowName}\n*Nodo que falló:* ${errorNode}\n*Error:* ${errorMessage.substring(0, 500)}\n*Contacto:* ${celular}\n*Execution ID:* ${executionId}\n*Timestamp:* ${new Date().toISOString()}\n\n_Revisar en n8n → Executions para más detalles_`;\n\nreturn [{\n  json: {\n    mensaje: mensaje\n  }\n}];"
+      },
+      "id": "format-error",
+      "name": "Formatear Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "TU_CHAT_ID_TELEGRAM",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-error",
+      "name": "Telegram Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Formatear Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Error": {
+      "main": [
+        [
+          {
+            "node": "Telegram Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "campana-error-handler"
+  },
+  "tags": []
+}
