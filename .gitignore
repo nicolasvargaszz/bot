@@ -49,3 +49,9 @@ redis_data/
 *.xlsx
 *.csv
 *.log
+
+# Private business strategy and local-only assets
+docs/business/
+prompts/
+data/templates/
+
