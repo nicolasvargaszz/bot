@@ -7,6 +7,7 @@ Current workflows:
 - `workflow_agente_whatsapp.json` - inbound WhatsApp agent proof of concept with handoff
 - `workflow_error_handler.json` - error alert workflow
 - `workflow_monitor_sesion.json` - session monitor workflow
+- `whatsapp_buffered_inbound_template.json` - new buffered inbound workflow template for messages coming from the FastAPI Redis buffer service
 
 These files are context for future business automations. Before using them for a client:
 
