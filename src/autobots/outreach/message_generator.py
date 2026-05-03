@@ -4,14 +4,56 @@ Generador de plantilla Excel con URLs de WhatsApp para contacto con negocios.
 
 import json
 from pathlib import Path
+from typing import Mapping
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 
+from autobots.leads.models import Lead, Niche
 from autobots.outreach.whatsapp_links import generate_wa_me_link
 from autobots.utils.phone import normalize_paraguay_phone_digits
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _lead_value(lead: Lead | Mapping[str, object], field: str) -> str:
+    """Read a string field from a Lead object or a dictionary."""
+    if isinstance(lead, Lead):
+        return str(getattr(lead, field, "") or "")
+    return str(lead.get(field, "") or "")
+
+
+def generate_outreach_message(lead: Lead | Mapping[str, object], niche: Niche) -> str:
+    """Generate a short Spanish outreach message for manual WhatsApp contact."""
+    name = _lead_value(lead, "name").strip()
+    business_name = name or "tu negocio"
+
+    templates: dict[Niche, str] = {
+        "real_estate": (
+            "Buenas! Soy Nicolás. Vi {business_name} y estoy ayudando a inmobiliarias "
+            "a responder más rápido consultas por WhatsApp, filtrar interesados por zona, "
+            "presupuesto y tipo de propiedad, y avisar cuando un lead está listo para seguimiento. "
+            "Te puedo mostrar una demo corta?"
+        ),
+        "retail": (
+            "Buenas! Soy Nicolás. Vi {business_name} y estoy ayudando a tiendas a responder "
+            "consultas repetitivas por WhatsApp sobre precio, talle, color, stock y delivery. "
+            "Te puedo mostrar una idea rápida para vender con menos desorden?"
+        ),
+        "clinics": (
+            "Buenas! Soy Nicolás. Vi {business_name} y estoy ayudando a clínicas y consultorios "
+            "a ordenar consultas de turnos por WhatsApp, pedir datos básicos y avisar cuando "
+            "alguien quiere agendar. Te puedo mostrar cómo funcionaría?"
+        ),
+        "beauty": (
+            "Buenas! Soy Nicolás. Vi {business_name} y estoy ayudando a salones y barberías "
+            "a responder consultas de precios, servicios y turnos por WhatsApp, sin perder "
+            "clientes por demora. Te puedo mostrar una demo corta?"
+        ),
+    }
+
+    return templates[niche].format(business_name=business_name)
+
 
 def limpiar_telefono(telefono):
     """Limpia el número de teléfono para formato WhatsApp."""
