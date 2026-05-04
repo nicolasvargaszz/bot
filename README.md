@@ -62,6 +62,30 @@ Generate manual WhatsApp links from a JSON lead export:
 PYTHONPATH=src python -m autobots.outreach.message_generator
 ```
 
+Run the WhatsApp message buffer service locally:
+
+```bash
+PYTHONPATH=src uvicorn autobots.services.message_buffer.app:app --host 0.0.0.0 --port 8081 --reload
+```
+
+The buffer service receives Evolution API webhook events at:
+
+```text
+POST /webhook/evolution
+```
+
+It stores short WhatsApp message fragments in Redis, waits for `MESSAGE_BUFFER_SECONDS`, combines messages from the same sender, and forwards one payload to `N8N_WEBHOOK_URL`. It does not send WhatsApp replies directly.
+
+Required local variables:
+
+```bash
+REDIS_URL=redis://localhost:6379/0
+N8N_WEBHOOK_URL=http://localhost:5678/webhook/whatsapp-buffer
+MESSAGE_BUFFER_SECONDS=8
+```
+
+Docker local deployment notes live in `docs/deployment/docker-local.md`.
+
 ## Reusable Legacy Context
 
 The repo preserves previous work in two groups:
@@ -73,6 +97,3 @@ The repo preserves previous work in two groups:
 ## AI tools that helped me to do this project are: 
 - Codex 5.5 extended thinking (almost all the time)
 - Claude Sonnet 4.7
-
-
-
