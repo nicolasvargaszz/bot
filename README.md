@@ -31,12 +31,6 @@ flowchart LR
     I --> J[Human follow-up]
 ```
 
-Autobots should never sell "tools" to clients. It sells business outcomes: faster replies, fewer lost leads, better organization, and clearer handoff to a human.
-
-## Target Niches
-
-
-The first target niche is real estate. Other target niches include retail stores, clinics, veterinarians, psychologists, beauty salons, and barbershops.
 
 ## Repository Layout
 
