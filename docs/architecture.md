@@ -2,6 +2,28 @@
 
 Autobots has two useful legacy foundations: a lead discovery pipeline and a WhatsApp/n8n response automation. The current refactor keeps both, but separates them into clear responsibilities.
 
+## System Overview
+
+```mermaid
+flowchart TD
+    A[Google Maps scraping] --> B[Raw lead data]
+    B --> C[Lead cleaner and scorer]
+    C --> D[Processed lead CSV]
+    D --> E[Local review dashboard]
+    D --> F[Manual WhatsApp outreach links]
+
+    G[Incoming WhatsApp message] --> H[Evolution API webhook]
+    H --> I[FastAPI message buffer]
+    I --> J[Redis]
+    J --> K[n8n buffered inbound workflow]
+    K --> L[AI response generation]
+    K --> M[CRM update]
+    K --> N[Telegram handoff]
+    N --> O[Human closer]
+```
+
+The architecture is intentionally split into two sides: lead acquisition for sales outreach, and inbound automation for client WhatsApp conversations.
+
 ## Lead Discovery
 
 `src/autobots/scrapers/google_maps.py` scrapes Google Maps businesses in Paraguay and extracts details such as name, phone, category, address, website status, ratings, reviews, photos, hours, and metadata.

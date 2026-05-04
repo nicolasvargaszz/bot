@@ -1,13 +1,12 @@
+# Autobots
 
-# bots 
+Autobots is an automation agency codebase for WhatsApp lead filtering, CRM organization, and human handoff systems for local businesses in Paraguay.
 
-
-
-This code is an automation agency codebase for WhatsApp lead filtering, CRM organization, and human handoff systems for local businesses in Paraguay, the idea come up after doing a similar work to one specific company.
+The project started from useful legacy code: a Google Maps lead generation pipeline and a previous WhatsApp/n8n automation. The current goal is to turn that context into a cleaner, repeatable Automation as a Service system.
 
 ## Core idea
 
-The idea is a WhatsApp Lead Filter + CRM + Telegram/WhatsApp Human Handoff system.
+The core product is a WhatsApp Lead Filter + CRM + Telegram/WhatsApp Human Handoff system.
 
 It should help a business:
 
@@ -17,10 +16,27 @@ It should help a business:
 - notify the owner or salesperson when a lead is worth follow-up
 - keep humans in control of closing conversations
 
+## System Map
+
+```mermaid
+flowchart LR
+    A[Lead sources] --> B[Lead processing]
+    B --> C[Manual outreach links]
+    C --> D[WhatsApp conversations]
+    D --> E[Message buffer service]
+    E --> F[n8n workflow]
+    F --> G[AI response]
+    F --> H[CRM update]
+    F --> I[Telegram handoff]
+    I --> J[Human follow-up]
+```
+
+Autobots should never sell "tools" to clients. It sells business outcomes: faster replies, fewer lost leads, better organization, and clearer handoff to a human.
+
 ## Target Niches
 
 
-The first target niche is real estate. See `docs/business/niches.md`.
+The first target niche is real estate. Other target niches include retail stores, clinics, veterinarians, psychologists, beauty salons, and barbershops.
 
 ## Repository Layout
 
@@ -29,6 +45,8 @@ The first target niche is real estate. See `docs/business/niches.md`.
 - `src/autobots/outreach/` - manual outreach helpers, including WhatsApp links
 - `src/autobots/dashboard/` - preserved local Flask dashboard
 - `src/autobots/config/` - non-secret scraper settings and search config
+- `src/autobots/services/message_buffer/` - FastAPI service that buffers WhatsApp message fragments before n8n
+- `src/autobots/handoff/` - local helpers for formatting human handoff alerts
 - `n8n/workflows/` - reusable n8n workflow exports from the previous WhatsApp automation
 - `docs/context/` - legacy technical context and implementation notes
 - `data/legacy/` - preserved legacy scraped dataset
@@ -86,14 +104,34 @@ MESSAGE_BUFFER_SECONDS=8
 
 Docker local deployment notes live in `docs/deployment/docker-local.md`.
 
+## Development Boundaries
+
+This repository prepares, routes, buffers, and documents automation flows. It does not send outbound WhatsApp campaigns from Python code.
+
+Safe actions in this repo:
+
+- generate manual WhatsApp links
+- inspect leads locally
+- buffer inbound WhatsApp messages
+- forward combined inbound messages to n8n
+- format human handoff alerts
+
+Actions that need explicit production review:
+
+- sending WhatsApp replies
+- importing n8n workflows into a live account
+- connecting real Telegram, Notion, AI, or Evolution credentials
+- processing real customer data
+
 ## Reusable Legacy Context
 
 The repo preserves previous work in two groups:
 
 - Google Maps scraping and sales pipeline logic from the old lead generation project.
-- n8n, Evolution API, Telegram, Notion, and AI workflow context from the previous WhatsApp responder project, but now i have total control over the code and does not need to be private.
+- n8n, Evolution API, Telegram, Notion, and AI workflow context from the previous WhatsApp responder project.
 
 
-## AI tools that helped me to do this project are: 
+## AI tools that helped me do this project
+
 - Codex 5.5 extended thinking (almost all the time)
 - Claude Sonnet 4.7

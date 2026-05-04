@@ -5,6 +5,28 @@ Autobots has two useful legacy foundations: a lead discovery pipeline and a What
 Detailed architecture documents:
 
 - `docs/architecture/message-buffer-and-ai-flow.md` - Redis message buffer, transcription, AI response, CRM, and handoff flow.
+- `docs/architecture/error_handling.md` - failure classification, fallback behavior, and retry strategy.
+- `docs/architecture/telegram_handoff.md` - Telegram alert format for human takeover.
+- `docs/architecture/voice-to-text.md` - audio transcription provider strategy.
+
+## High-Level Flow
+
+```mermaid
+flowchart LR
+    subgraph Sales Pipeline
+        A[Scrape or collect leads] --> B[Clean and score]
+        B --> C[Review locally]
+        C --> D[Manual WhatsApp links]
+    end
+
+    subgraph Client Automation
+        E[WhatsApp inbound] --> F[Buffer messages]
+        F --> G[n8n workflow]
+        G --> H[AI answer]
+        G --> I[CRM]
+        G --> J[Human handoff]
+    end
+```
 
 ## Lead Discovery
 
@@ -42,6 +64,4 @@ Deployment uses `docker-compose.yml` with environment variables. Real values bel
 
 This repo is organized for safe preparation. Outbound WhatsApp automation is not implemented here yet.
 
-Just document and the strategy to build the automatization agency.
-
-I think this project can be a greate oportunity to create a AaaS
+The current strategy is to build the automation agency in layers: first organize leads and manual outreach, then prove the inbound WhatsApp automation with a demo, then package repeatable client flows.

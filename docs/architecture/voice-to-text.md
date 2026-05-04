@@ -19,6 +19,26 @@ The buffer should forward one combined message to n8n:
 
 The buffer service still does not send WhatsApp replies directly. It only receives Evolution API webhooks, buffers messages, and forwards combined payloads to n8n.
 
+## Audio Handling Flow
+
+```mermaid
+flowchart TD
+    A[Audio webhook] --> B[Extract audio reference]
+    B --> C{Provider mode}
+    C -- disabled --> D[Use voice fallback placeholder]
+    C -- whisper_api --> E[Validate declared size]
+    E --> F[Download to temporary file]
+    F --> G[Enforce max file size]
+    G --> H[Send to transcription API]
+    H --> I{Text returned?}
+    I -- yes --> J[Add transcription text to buffer]
+    I -- no --> D
+    C -- local_whisper --> K[Future local provider]
+    K --> D
+    J --> L[Delete temp file]
+    D --> L
+```
+
 ## Provider Modes
 
 `TRANSCRIPTION_PROVIDER` controls transcription behavior:

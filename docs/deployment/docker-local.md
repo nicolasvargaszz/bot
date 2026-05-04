@@ -4,6 +4,20 @@ This guide runs the local Autobots WhatsApp automation stack with Redis, the Fas
 
 No real tokens belong in this file or in git. Copy `.env.example` to `.env` and fill local values there.
 
+## Local Service Topology
+
+```mermaid
+flowchart LR
+    A[WhatsApp] --> B[Evolution API]
+    B --> C[message-buffer:8081]
+    C --> D[Redis]
+    C --> E[n8n:5678]
+    E --> F[Gemini / Notion / Telegram]
+    E --> B
+```
+
+Use this file when you want the local containers to behave like the intended production routing: Evolution sends incoming messages to the buffer service, and the buffer service forwards one combined payload to n8n.
+
 ## 1. Run Redis
 
 Redis is defined in `docker-compose.yml` using the official image:

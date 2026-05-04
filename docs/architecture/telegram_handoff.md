@@ -14,6 +14,20 @@ The alert should help the human answer one question:
 What should I do next with this lead?
 ```
 
+## Handoff Flow
+
+```mermaid
+flowchart TD
+    A[n8n receives combined message] --> B[Classify intent and lead status]
+    B --> C{Needs human?}
+    C -- no --> D[Continue automated response]
+    C -- yes --> E[Select handoff category]
+    E --> F[Build Telegram message]
+    F --> G[Send internal alert]
+    G --> H[Human opens WhatsApp or CRM]
+    H --> I[Manual follow-up]
+```
+
 ## When To Trigger A Handoff
 
 Trigger a Telegram alert when any of these conditions are true:
@@ -259,4 +273,3 @@ Hola estimado cliente, segun nuestro sistema de automatizacion con multiples int
 - Avoid logging full Telegram messages in production if they contain private user data.
 - Use environment variables for Telegram bot token and chat IDs when message sending is implemented later.
 - This specification only defines message templates. Sending logic should be implemented separately.
-

@@ -4,6 +4,25 @@
 
 ---
 
+## MAPA DE NODOS
+
+```mermaid
+flowchart TD
+    A[Mensaje normalizado] --> B[Buscar contacto en Notion]
+    B --> C[Procesar historial y rate limit]
+    C --> D{Rate limit excedido?}
+    D -- sí --> E[Responder límite]
+    D -- no --> F[AI Agent]
+    F --> G{Registrar o escalar?}
+    G -- registrar --> H[Crear / actualizar Notion]
+    G -- escalar --> I[Handoff humano]
+    H --> J[Actualizar historial]
+    I --> J
+    J --> K[Error workflow si algo falla]
+```
+
+Estos nodos son recetas heredadas. No pegues tokens reales en el repositorio; usa credenciales o variables de entorno dentro de n8n.
+
 ## CONFIGURACIÓN PREVIA REQUERIDA EN NOTION
 
 Antes de usar estos nodos, necesitás:

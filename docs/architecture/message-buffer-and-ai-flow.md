@@ -67,6 +67,35 @@ Recommended service boundaries:
 - Gemini handles response generation.
 - Transcription provider handles voice-to-text behind an internal provider interface.
 
+Visual sequence:
+
+```mermaid
+sequenceDiagram
+    participant User as WhatsApp user
+    participant Evo as Evolution API
+    participant Buffer as Message Buffer Service
+    participant Redis as Redis
+    participant N8N as n8n
+    participant AI as Gemini
+    participant CRM as Notion CRM
+    participant TG as Telegram
+    participant Human as Human closer
+
+    User->>Evo: Sends text/audio fragments
+    Evo->>Buffer: Webhook event
+    Buffer->>Buffer: Normalize and dedupe
+    Buffer->>Redis: Append to contact buffer
+    Buffer->>Redis: Reset debounce timer
+    Redis-->>Buffer: Quiet window expires
+    Buffer->>N8N: Combined payload
+    N8N->>AI: Classify and generate
+    N8N->>CRM: Create/update lead
+    N8N->>TG: Alert if handoff needed
+    TG->>Human: Context-rich alert
+    N8N->>Evo: Send reply when appropriate
+    Evo->>User: WhatsApp response
+```
+
 ## 4. Redis Data Model
 
 Use contact/session scoped keys. A session key should be stable per client instance and phone number.

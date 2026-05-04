@@ -4,6 +4,18 @@ Autobots includes a simple local Streamlit dashboard for reviewing processed lea
 
 The dashboard does not send WhatsApp messages. It only helps inspect leads, read suggested messages, open generated `wa.me` links manually, and update local lead status in the CSV.
 
+## Review Workflow
+
+```mermaid
+flowchart TD
+    A[Processed CSV in data/processed] --> B[Streamlit dashboard]
+    B --> C[Filter by niche, city, score, priority, status]
+    C --> D[Review selected lead]
+    D --> E[Open WhatsApp link manually]
+    D --> F[Update local status]
+    F --> G[Save updated CSV]
+```
+
 ## Run The Dashboard
 
 Install dependencies:

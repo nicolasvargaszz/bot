@@ -26,6 +26,26 @@ Autobots currently depends on:
 
 Any of these can fail. The system should assume failure is normal and recover where practical.
 
+## Reliability Decision Flow
+
+```mermaid
+flowchart TD
+    A[Error detected] --> B{Duplicate event?}
+    B -- yes --> C[Ignore safely and return success]
+    B -- no --> D{Malformed or unsupported input?}
+    D -- yes --> E[Reject or mark unsupported without retry]
+    D -- no --> F{Dependency unavailable?}
+    F -- yes --> G{Retryable?}
+    G -- yes --> H[Retry with exponential backoff]
+    H --> I{Recovered?}
+    I -- yes --> J[Continue normal flow]
+    I -- no --> K[Store failed payload when possible]
+    K --> L[Alert admin if policy requires]
+    G -- no --> L
+    F -- no --> M[Classify as unknown]
+    M --> H
+```
+
 ## Error Categories
 
 | Category | Retryable | Admin Alert | Silent Ignore | Store Failed Message |
@@ -153,6 +173,20 @@ If Redis is unavailable, Redis obviously cannot store the failed message. In tha
 5. optionally add a future local file fallback under an ignored runtime directory
 
 Do not store secrets, tokens, session data, or full internal webhook URLs in failed payloads.
+
+```mermaid
+flowchart LR
+    A[Combined payload] --> B{Delivery failed?}
+    B -- no --> C[Delete buffer]
+    B -- yes --> D[Classify error]
+    D --> E{Can store failure?}
+    E -- yes --> F[failed:instance:phone:timestamp]
+    E -- no --> G[Structured log only]
+    F --> H{Alert required?}
+    G --> H
+    H -- yes --> I[Admin or Telegram alert]
+    H -- no --> J[No alert]
+```
 
 ## Fallback Behavior If AI Is Unavailable
 
@@ -285,4 +319,3 @@ src/autobots/services/message_buffer/retry.py
 ```
 
 These modules are intentionally small and pure. They classify errors and calculate retry decisions, but they do not send Telegram messages or perform network calls.
-

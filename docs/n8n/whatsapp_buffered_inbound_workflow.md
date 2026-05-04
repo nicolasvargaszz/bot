@@ -10,6 +10,26 @@ n8n/workflows/whatsapp_buffered_inbound_template.json
 
 The JSON export is best-effort because n8n node internals can change between versions. Use this guide as the source of truth if the import needs manual adjustment.
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A[Webhook Trigger] --> B[Set / Normalize Input]
+    B --> C[Gemini Intent Classification]
+    C --> D[Parse Classification]
+    D --> E{Intent / Lead State}
+    E -- spam or not interested --> F[Return or mark low priority]
+    E -- needs info --> G[Gemini Response Generation]
+    E -- interested / hot --> H[Notion Create or Update Lead]
+    H --> I{Handoff needed?}
+    I -- yes --> J[Telegram Handoff]
+    I -- no --> G
+    J --> G
+    G --> K[Evolution API Send Message]
+    K --> L[Return Data]
+    A -. errors .-> M[Error Handler]
+```
+
 ## Purpose
 
 The buffer service already handles:
