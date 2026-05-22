@@ -4,13 +4,15 @@ services:
     container_name: evolution_postgres
     restart: always
     environment:
-      POSTGRES_DB: evolution
-      POSTGRES_USER: evolution
+      # Los valores por defecto ("evolution") se usan si no se definen en el .env,
+      # pero es mejor que las credenciales ya no estén hardcodeadas.
+      POSTGRES_DB: ${POSTGRES_DB:-evolution}
+      POSTGRES_USER: ${POSTGRES_USER:-evolution}
       POSTGRES_PASSWORD: ${EVOLUTION_POSTGRES_PASSWORD:?Set EVOLUTION_POSTGRES_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U evolution -d evolution"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-evolution} -d ${POSTGRES_DB:-evolution}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,7 +35,9 @@ services:
     container_name: evolution_api
     restart: always
     ports:
-      - '8080:8080'
+      # Restringido a localhost (127.0.0.1) para mayor seguridad en tu red.
+      # Así solo tu computadora puede acceder a la API para escanear el QR.
+      - '127.0.0.1:8080:8080'
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store
@@ -44,13 +48,14 @@ services:
       - CONFIG_SESSION_PHONE_VERSION=${EVOLUTION_SESSION_PHONE_VERSION:-2.3000.10216511034}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://evolution:${EVOLUTION_POSTGRES_PASSWORD}@evolution_postgres:5432/evolution?schema=public
+      # La URI de conexión ahora se arma dinámicamente sin exponer directamente el usuario o la DB.
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER:-evolution}:${EVOLUTION_POSTGRES_PASSWORD}@evolution_postgres:5432/${POSTGRES_DB:-evolution}?schema=public
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://evolution_redis:6379
       - STORE_MESSAGES=true
       - DEL_INSTANCE_ON_DISCONNECT=false
       - WEBHOOK_GLOBAL_ENABLED=true
-      - WEBHOOK_GLOBAL_URL=${N8N_WEBHOOK_URL:-http://localhost:5678/webhook/campana}
+      - WEBHOOK_GLOBAL_URL=${EVOLUTION_WEBHOOK_URL:-http://message-buffer:8081/webhook/evolution}
       - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=true
       - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
     depends_on:
@@ -59,12 +64,54 @@ services:
       redis:
         condition: service_healthy
 
+  message-buffer:
+    build:
+      context: .
+      dockerfile: Dockerfile.message-buffer
+    container_name: message_buffer
+    restart: always
+    # ELIMINADO: ports: - '8081:8081'. Este servicio solo necesita hablar con Evolution y n8n.
+    # Al quitar esto, el contenedor queda completamente aislado del exterior.
+    environment:
+      # CORREGIDO: La URL de Redis ahora apunta al nombre correcto del contenedor.
+      - REDIS_URL=redis://evolution_redis:6379/0
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/whatsapp-buffer}
+      - MESSAGE_BUFFER_SECONDS=${MESSAGE_BUFFER_SECONDS:-8}
+      - MESSAGE_BUFFER_MAX_MESSAGES=${MESSAGE_BUFFER_MAX_MESSAGES:-20}
+      - MESSAGE_BUFFER_MAX_AGE_SECONDS=${MESSAGE_BUFFER_MAX_AGE_SECONDS:-120}
+      - MESSAGE_BUFFER_DEDUP_TTL_SECONDS=${MESSAGE_BUFFER_DEDUP_TTL_SECONDS:-86400}
+      - MESSAGE_BUFFER_POLL_SECONDS=${MESSAGE_BUFFER_POLL_SECONDS:-1.0}
+      - N8N_REQUEST_TIMEOUT_SECONDS=${N8N_REQUEST_TIMEOUT_SECONDS:-10.0}
+      - TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER:-disabled}
+      - WHISPER_API_KEY=${WHISPER_API_KEY:-}
+      - WHISPER_API_URL=${WHISPER_API_URL:-https://api.openai.com/v1/audio/transcriptions}
+      - AUDIO_DOWNLOAD_TIMEOUT_SECONDS=${AUDIO_DOWNLOAD_TIMEOUT_SECONDS:-15}
+      - MAX_AUDIO_SIZE_MB=${MAX_AUDIO_SIZE_MB:-10}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=2).read()\""
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+      n8n:
+        condition: service_started
+
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n
     restart: always
     ports:
-      - '5678:5678'
+      # Restringido a localhost (127.0.0.1). Si en tu casa necesitas entrar a n8n desde el celular 
+      # u otra PC conectada al mismo WiFi, cambia esto a '5678:5678' nuevamente.
+      - '127.0.0.1:5678:5678'
     volumes:
       - n8n_data:/home/node/.n8n
     environment:
@@ -72,7 +119,7 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
       - WEBHOOK_URL=${N8N_PUBLIC_URL:-http://localhost:5678/}
-      - GENERIC_TIMEZONE=America/Asuncion
+      - GENERIC_TIMEZONE=${TIMEZONE:-America/Asuncion}
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:?Set N8N_BASIC_AUTH_PASSWORD in .env}

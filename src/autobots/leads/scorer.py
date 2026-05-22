@@ -13,7 +13,175 @@ from typing import Optional
 import json
 import logging
 
+from autobots.leads.models import Lead, LeadScore, Niche
+
 logger = logging.getLogger(__name__)
+
+
+# ===========================================
+# GENERIC LEAD PIPELINE SCORING
+# ===========================================
+
+NICHE_KEYWORDS: dict[Niche, tuple[str, ...]] = {
+    "real_estate": (
+        "inmobiliaria",
+        "inmueble",
+        "propiedad",
+        "real estate",
+        "bienes raices",
+        "bienes raíces",
+        "alquiler",
+        "venta de casas",
+        "departamento",
+    ),
+    "retail": (
+        "tienda",
+        "ropa",
+        "boutique",
+        "moda",
+        "calzado",
+        "zapateria",
+        "zapatería",
+        "retail",
+        "bazar",
+        "cosmetico",
+        "cosmético",
+    ),
+    "clinics": (
+        "clinica",
+        "clínica",
+        "consultorio",
+        "dental",
+        "odontologia",
+        "odontología",
+        "psicologia",
+        "psicología",
+        "veterinaria",
+        "medico",
+        "médico",
+    ),
+    "beauty": (
+        "peluqueria",
+        "peluquería",
+        "barber",
+        "barberia",
+        "barbería",
+        "salon",
+        "salón",
+        "spa",
+        "estetica",
+        "estética",
+        "uñas",
+        "manicura",
+    ),
+}
+
+
+def priority_from_score(score: int) -> str:
+    """Convert a numeric score to a simple sales priority label."""
+    if score >= 75:
+        return "high"
+    if score >= 50:
+        return "medium"
+    return "low"
+
+
+def _category_matches_niche(category: str, niche: Niche) -> bool:
+    category_text = category.lower()
+    return any(keyword in category_text for keyword in NICHE_KEYWORDS[niche])
+
+
+def _score_reviews(review_count: int | None) -> tuple[int, str | None]:
+    reviews = review_count or 0
+    if reviews >= 100:
+        return 15, "many reviews indicate an active business"
+    if reviews >= 30:
+        return 12, "solid review count"
+    if reviews >= 10:
+        return 8, "some public activity"
+    if reviews >= 1:
+        return 4, "low but visible activity"
+    return 0, None
+
+
+def _score_rating(rating: float | None) -> tuple[int, str | None]:
+    if rating is None:
+        return 0, None
+    if rating >= 4.5:
+        return 10, "excellent rating"
+    if rating >= 4.0:
+        return 8, "good rating"
+    if rating >= 3.5:
+        return 5, "acceptable rating"
+    return 0, None
+
+
+def score_lead(lead: Lead, niche: Niche) -> LeadScore:
+    """
+    Score a lead for a specific sales niche.
+
+    The score estimates whether the lead is worth contacting first. It is not a
+    guarantee of purchase intent.
+    """
+    score = 0
+    reasons: list[str] = []
+
+    if lead.has_valid_phone:
+        score += 20
+        reasons.append("valid WhatsApp phone")
+    else:
+        reasons.append("missing or invalid phone")
+
+    if lead.name:
+        score += 8
+    if lead.city:
+        score += 5
+    if lead.source_url:
+        score += 5
+
+    if _category_matches_niche(lead.category, niche):
+        score += 25
+        reasons.append(f"category matches {niche}")
+    elif lead.category:
+        score += 8
+        reasons.append("has a business category")
+
+    review_score, review_reason = _score_reviews(lead.review_count)
+    score += review_score
+    if review_reason:
+        reasons.append(review_reason)
+
+    rating_score, rating_reason = _score_rating(lead.rating)
+    score += rating_score
+    if rating_reason:
+        reasons.append(rating_reason)
+
+    if lead.has_website is False:
+        score += 15
+        reasons.append("no website detected")
+    elif lead.has_website is True:
+        score += 4
+        reasons.append("existing website may need improvement")
+
+    if niche == "real_estate":
+        score += 7
+        reasons.append("real estate inquiries are a strong fit for lead filtering")
+    elif niche == "clinics":
+        score += 6
+        reasons.append("appointment-based business fit")
+    elif niche == "retail":
+        score += 5
+        reasons.append("retail inquiries often repeat over WhatsApp")
+    elif niche == "beauty":
+        score += 6
+        reasons.append("booking and FAQ automation fit")
+
+    final_score = min(score, 100)
+    return LeadScore(
+        score=final_score,
+        priority=priority_from_score(final_score),
+        reasons=reasons,
+    )
 
 
 # ===========================================
@@ -153,10 +321,10 @@ class AnalysisResult:
     # Recommendations
     website_necessity_score: float  # 0-100
     recommended_structure: WebsiteStructure
-    recommended_pages: list = field(default_factory=list)
     
     # Decision
     decision: Decision
+    recommended_pages: list = field(default_factory=list)
     decision_reasons: list = field(default_factory=list)
     
     # Metadata

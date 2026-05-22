@@ -1,7 +1,9 @@
 """Generate WhatsApp click-to-chat links without sending messages."""
 
+from typing import Mapping
 from urllib.parse import quote
 
+from autobots.leads.models import Lead
 from autobots.utils.phone import normalize_paraguay_phone_digits
 
 
@@ -24,3 +26,9 @@ def generate_wa_me_link(phone: object, message: str | None = None) -> str:
     if message:
         url = f"{url}?text={encode_message(message)}"
     return url
+
+
+def generate_lead_whatsapp_link(lead: Lead | Mapping[str, object], message: str) -> str:
+    """Generate a wa.me link for a processed lead or lead-like dictionary."""
+    phone = lead.normalized_phone if isinstance(lead, Lead) else lead.get("normalized_phone")
+    return generate_wa_me_link(phone, message)

@@ -2,27 +2,31 @@
 
 Autobots has two useful legacy foundations: a lead discovery pipeline and a WhatsApp/n8n response automation. The current refactor keeps both, but separates them into clear responsibilities.
 
-## System Overview
+Detailed architecture documents:
+
+- `docs/architecture/message-buffer-and-ai-flow.md` - Redis message buffer, transcription, AI response, CRM, and handoff flow.
+- `docs/architecture/error_handling.md` - failure classification, fallback behavior, and retry strategy.
+- `docs/architecture/telegram_handoff.md` - Telegram alert format for human takeover.
+- `docs/architecture/voice-to-text.md` - audio transcription provider strategy.
+
+## High-Level Flow
 
 ```mermaid
-flowchart TD
-    A[Google Maps scraping] --> B[Raw lead data]
-    B --> C[Lead cleaner and scorer]
-    C --> D[Processed lead CSV]
-    D --> E[Local review dashboard]
-    D --> F[Manual WhatsApp outreach links]
+flowchart LR
+    subgraph Sales Pipeline
+        A[Scrape or collect leads] --> B[Clean and score]
+        B --> C[Review locally]
+        C --> D[Manual WhatsApp links]
+    end
 
-    G[Incoming WhatsApp message] --> H[Evolution API webhook]
-    H --> I[FastAPI message buffer]
-    I --> J[Redis]
-    J --> K[n8n buffered inbound workflow]
-    K --> L[AI response generation]
-    K --> M[CRM update]
-    K --> N[Telegram handoff]
-    N --> O[Human closer]
+    subgraph Client Automation
+        E[WhatsApp inbound] --> F[Buffer messages]
+        F --> G[n8n workflow]
+        G --> H[AI answer]
+        G --> I[CRM]
+        G --> J[Human handoff]
+    end
 ```
-
-The architecture is intentionally split into two sides: lead acquisition for sales outreach, and inbound automation for client WhatsApp conversations.
 
 ## Lead Discovery
 
@@ -59,3 +63,5 @@ Deployment uses `docker-compose.yml` with environment variables. Real values bel
 ## Current Boundary
 
 This repo is organized for safe preparation. Outbound WhatsApp automation is not implemented here yet.
+
+The current strategy is to build the automation agency in layers: first organize leads and manual outreach, then prove the inbound WhatsApp automation with a demo, then package repeatable client flows.

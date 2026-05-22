@@ -8,6 +8,14 @@ import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any, Mapping
+
+from autobots.leads.cleaner import clean_leads
+from autobots.leads.models import OUTPUT_FIELDS, Lead, Niche, ProcessedLead
+from autobots.leads.scorer import score_lead
+from autobots.outreach.message_generator import generate_outreach_message
+from autobots.outreach.whatsapp_links import generate_wa_me_link
+from autobots.utils.files import read_csv, read_json, write_csv
 
 # Configuración
 LEADS_POR_LOTE = 30
@@ -38,6 +46,92 @@ CATEGORIAS_PREMIUM = {
     "Panadería": 55, "Lavadero de autos": 50, "Florería": 60,
     "Tienda de electrónica": 55, "Imprenta": 50
 }
+
+
+def read_raw_leads(input_path: str | Path) -> list[dict[str, Any]]:
+    """Read raw leads from a CSV or JSON file."""
+    path = Path(input_path)
+    suffix = path.suffix.lower()
+
+    if suffix == ".csv":
+        return [dict(row) for row in read_csv(path)]
+
+    if suffix == ".json":
+        data = read_json(path)
+        return _records_from_json(data)
+
+    raise ValueError(f"Unsupported input file type: {suffix}. Use .csv or .json")
+
+
+def _records_from_json(data: Any) -> list[dict[str, Any]]:
+    """Extract a record list from common JSON export shapes."""
+    if isinstance(data, list):
+        return [dict(item) for item in data if isinstance(item, Mapping)]
+
+    if isinstance(data, Mapping):
+        for key in ("leads", "businesses", "data", "results", "items"):
+            value = data.get(key)
+            if isinstance(value, list):
+                return [dict(item) for item in value if isinstance(item, Mapping)]
+
+    raise ValueError("JSON input must be a list of records or contain leads/businesses/data/results/items")
+
+
+def process_lead(lead: Lead, niche: Niche) -> ProcessedLead:
+    """Score one lead and prepare it for manual WhatsApp outreach."""
+    lead_score = score_lead(lead, niche)
+    suggested_message = generate_outreach_message(lead, niche)
+
+    whatsapp_link = ""
+    status = "new"
+    if lead.normalized_phone:
+        whatsapp_link = generate_wa_me_link(lead.normalized_phone, suggested_message)
+    else:
+        status = "invalid_phone"
+
+    return ProcessedLead(
+        name=lead.name,
+        phone=lead.phone,
+        normalized_phone=lead.normalized_phone,
+        category=lead.category,
+        city=lead.city,
+        source_url=lead.source_url,
+        score=lead_score.score,
+        priority=lead_score.priority,
+        score_reasons=lead_score.reasons_text,
+        suggested_message=suggested_message,
+        whatsapp_link=whatsapp_link,
+        status=status,
+    )
+
+
+def process_records(
+    records: list[Mapping[str, Any]],
+    niche: Niche,
+    *,
+    limit: int | None = None,
+) -> list[ProcessedLead]:
+    """Clean, deduplicate, score, sort, and optionally limit raw records."""
+    leads = clean_leads(records)
+    processed = [process_lead(lead, niche) for lead in leads]
+    processed.sort(key=lambda lead: lead.score, reverse=True)
+    if limit is not None:
+        return processed[:limit]
+    return processed
+
+
+def process_leads_file(
+    input_path: str | Path,
+    output_path: str | Path,
+    niche: Niche,
+    *,
+    limit: int | None = None,
+) -> list[ProcessedLead]:
+    """Process a CSV or JSON file and export the result as CSV."""
+    records = read_raw_leads(input_path)
+    processed = process_records(records, niche, limit=limit)
+    write_csv(output_path, [lead.to_row() for lead in processed], OUTPUT_FIELDS)
+    return processed
 
 
 def cargar_datos():

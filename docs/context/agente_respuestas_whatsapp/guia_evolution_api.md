@@ -4,6 +4,22 @@
 
 ---
 
+## MAPA RÁPIDO
+
+```mermaid
+flowchart TD
+    A[Evolution API] --> B[Webhook]
+    B --> C{Tipo de mensaje}
+    C -- texto --> D[n8n o message buffer]
+    C -- grupo --> E[Ignorar]
+    C -- media no soportada --> F[Filtrar o derivar]
+    D --> G[Responder / registrar / handoff]
+    A --> H[Presencia escribiendo]
+    A --> I[Estado de sesión y QR]
+```
+
+Esta guía es contexto heredado. Antes de usarla en un cliente real, reemplazar placeholders, revisar endpoints y validar que la versión actual de Evolution API mantenga la misma estructura.
+
 ## 1. CONFIGURAR WEBHOOK PARA SOLO MENSAJES DE TEXTO
 
 Por defecto, Evolution API envía TODOS los tipos de mensajes al webhook (texto, imágenes, stickers, audios, etc.). Para filtrar solo texto, hay dos opciones:

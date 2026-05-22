@@ -1,0 +1,475 @@
+{
+  "name": "Autobots - WhatsApp Buffered Inbound Template",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-buffer",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-buffered-message",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        320
+      ],
+      "webhookId": "autobots-whatsapp-buffer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst phone = String(input.phone || '').replace(/\\D+/g, '');\nconst combinedText = String(input.combined_text || input.text || '').replace(/\\s+/g, ' ').trim();\nconst messages = Array.isArray(input.messages) ? input.messages : [];\n\nreturn [{\n  json: {\n    source: input.source || 'message-buffer',\n    instance: input.instance || 'autobots-main',\n    phone,\n    push_name: input.push_name || input.name || '',\n    message_type: input.message_type || (input.contains_audio ? 'audio' : 'text'),\n    combined_text: combinedText,\n    messages,\n    buffer_id: input.buffer_id || '',\n    received_at: new Date().toISOString(),\n  },\n}];"
+      },
+      "id": "set-normalize-input",
+      "name": "Set / Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_MODEL || 'gemini-2.5-flash') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"text\": \"Classify this WhatsApp lead message for Autobots, an agency selling WhatsApp automation to Paraguayan businesses. Return ONLY valid JSON with keys: intent, lead_status, should_reply, should_update_crm, should_handoff, handoff_reason, is_spam, confidence, next_question, summary. Allowed intent values: interested, not_interested, needs_more_info, spam, unknown. Message: {{ JSON.stringify($json.combined_text) }}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.2,\n    \"responseMimeType\": \"application/json\"\n  }\n}"
+      },
+      "id": "gemini-intent-classification",
+      "name": "Gemini Intent Classification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Set / Normalize Input').item.json;\nconst response = $input.first().json;\nconst text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nlet parsed = {};\ntry {\n  parsed = JSON.parse(text);\n} catch (error) {\n  parsed = {\n    intent: 'unknown',\n    lead_status: 'needs_review',\n    should_reply: true,\n    should_update_crm: true,\n    should_handoff: true,\n    handoff_reason: 'Gemini classification JSON parse failed',\n    is_spam: false,\n    confidence: 0,\n    next_question: null,\n    summary: original.combined_text,\n  };\n}\n\nreturn [{\n  json: {\n    ...original,\n    classification: parsed,\n    intent: parsed.intent || 'unknown',\n    lead_status: parsed.lead_status || 'new',\n    should_reply: parsed.should_reply !== false,\n    should_update_crm: parsed.should_update_crm !== false,\n    should_handoff: parsed.should_handoff === true,\n    handoff_reason: parsed.handoff_reason || '',\n    is_spam: parsed.is_spam === true || parsed.intent === 'spam',\n    summary: parsed.summary || original.combined_text,\n  },\n}];"
+      },
+      "id": "parse-classification",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "spam-or-not-interested",
+              "leftValue": "={{ $json.is_spam === true || $json.intent === 'not_interested' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-interested-not-interested-needs-more-info-spam",
+      "name": "IF: Interested / Not Interested / Needs More Info / Spam",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.notion.com/v1/pages' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.NOTION_TOKEN }}"
+            },
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"parent\": { \"database_id\": $env.NOTION_DATABASE_ID },\n  \"properties\": {\n    \"Phone\": { \"title\": [{ \"text\": { \"content\": $json.phone } }] },\n    \"Name\": { \"rich_text\": [{ \"text\": { \"content\": $json.push_name || 'Unknown' } }] },\n    \"Status\": { \"select\": { \"name\": $json.lead_status || 'new' } },\n    \"Intent\": { \"select\": { \"name\": $json.intent || 'unknown' } },\n    \"Last Message\": { \"rich_text\": [{ \"text\": { \"content\": $json.combined_text.substring(0, 1900) } }] },\n    \"Summary\": { \"rich_text\": [{ \"text\": { \"content\": ($json.summary || '').substring(0, 1900) } }] }\n  }\n}"
+      },
+      "id": "notion-create-update-lead",
+      "name": "Notion Create or Update Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        420
+      ],
+      "notes": "Template node. In production, search by phone first, then update existing page or create a new page."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "handoff-needed",
+              "leftValue": "={{ $json.should_handoff === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-telegram-handoff",
+      "name": "IF: Telegram Handoff Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [
+        1620,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🔥 *Lead listo para seguimiento*\\n\\n*Nombre:* {{ $json.push_name || 'Sin nombre' }}\\n*Teléfono:* {{ $json.phone }}\\n*Intent:* {{ $json.intent }}\\n*Estado:* {{ $json.lead_status }}\\n*Motivo:* {{ $json.handoff_reason || 'Revisar conversación' }}\\n\\n*Mensaje:*\\n{{ $json.combined_text }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-handoff",
+      "name": "Telegram Handoff",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_MODEL || 'gemini-2.5-flash') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"text\": \"Write a short WhatsApp reply in natural Spanish for a potential client interested in WhatsApp automation. Keep it concise, helpful, and ask one useful next question if qualification is needed. Do not mention AI. Context JSON: {{ JSON.stringify($json) }}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.4\n  }\n}"
+      },
+      "id": "gemini-response-generation",
+      "name": "Gemini Response Generation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2140,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $('Parse Classification').item.json;\nconst response = $input.first().json;\nconst reply = response.candidates?.[0]?.content?.parts?.[0]?.text || 'Gracias por escribirme. Te respondo en breve con más información.';\nreturn [{\n  json: {\n    ...context,\n    reply_text: String(reply).trim(),\n    should_send_whatsapp: context.should_reply !== false && context.is_spam !== true,\n  },\n}];"
+      },
+      "id": "parse-response",
+      "name": "Parse Generated Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.EVOLUTION_SERVER_URL || 'http://evolution-api:8080') + '/message/sendText/' + $json.instance }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"number\": $json.phone,\n  \"text\": $json.reply_text\n}"
+      },
+      "id": "evolution-send-message",
+      "name": "Evolution API Send Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2660,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"phone\": $('Parse Classification').item.json.phone,\n  \"intent\": $('Parse Classification').item.json.intent,\n  \"handoff\": $('Parse Classification').item.json.should_handoff === true,\n  \"reply_sent\": $('Parse Generated Response').item.json.should_send_whatsapp === true\n}",
+        "options": {}
+      },
+      "id": "respond-to-buffer",
+      "name": "Return Data To Buffer Service",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2920,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"ignored\": true,\n  \"reason\": $json.intent || 'spam_or_not_interested'\n}",
+        "options": {}
+      },
+      "id": "respond-no-action",
+      "name": "Return No Action",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        180
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        80,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🚨 *Error en WhatsApp Buffered Inbound*\\n\\n*Workflow:* {{ $json.workflow?.name || 'unknown' }}\\n*Nodo:* {{ $json.execution?.error?.node?.name || 'unknown' }}\\n*Error:* {{ $json.execution?.error?.message || 'unknown error' }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-error-alert",
+      "name": "Telegram Error Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        340,
+        720
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set / Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set / Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Gemini Intent Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Intent Classification": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "IF: Interested / Not Interested / Needs More Info / Spam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Interested / Not Interested / Needs More Info / Spam": {
+      "main": [
+        [
+          {
+            "node": "Return No Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notion Create or Update Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion Create or Update Lead": {
+      "main": [
+        [
+          {
+            "node": "IF: Telegram Handoff Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Telegram Handoff Needed": {
+      "main": [
+        [
+          {
+            "node": "Telegram Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Response Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Handoff": {
+      "main": [
+        [
+          {
+            "node": "Gemini Response Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Response Generation": {
+      "main": [
+        [
+          {
+            "node": "Parse Generated Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Generated Response": {
+      "main": [
+        [
+          {
+            "node": "Evolution API Send Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution API Send Message": {
+      "main": [
+        [
+          {
+            "node": "Return Data To Buffer Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Telegram Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Best-effort template for buffered WhatsApp inbound messages from the Autobots FastAPI message buffer service."
+  },
+  "tags": []
+}
