@@ -34,24 +34,18 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_CLASSIFICATION_MODEL || $env.GEMINI_MODEL || 'gemini-2.5-flash') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ $json.ai_request.url }}",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($json.ai_request.headers) }}",
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({\n  systemInstruction: {\n    parts: [{\n      text: [\n        \"You are the decision engine for Autobots, Nicolas Vargas' WhatsApp automation agency in Paraguay.\",\n        \"Classify inbound WhatsApp leads and extract useful CRM memory.\",\n        \"Return ONLY valid JSON. No markdown. No explanations. Never invent facts.\",\n        \"Timezone: America/Asuncion.\",\n        \"Do not write the final WhatsApp answer here.\"\n      ].join(\"\\n\")\n    }]\n  },\n  contents: [{\n    role: \"user\",\n    parts: [{\n      text:\n        \"Current date/time in Paraguay: \" + $now.toISO() +\n        \"\\n\\nReturn one JSON object with exactly these keys:\" +\n        \"\\nintent: interested, needs_more_info, wants_price, wants_demo, wants_meeting, wants_callback, wants_human, not_interested, spam, unknown.\" +\n        \"\\nlead_status: new, qualifying, interested, demo_requested, meeting_requested, follow_up_needed, needs_human, not_interested, spam, needs_review.\" +\n        \"\\nshould_reply: boolean.\" +\n        \"\\nshould_update_crm: boolean.\" +\n        \"\\nshould_handoff: boolean.\" +\n        \"\\nhandoff_reason: string or null.\" +\n        \"\\nshould_create_calendar_event: boolean.\" +\n        \"\\ncalendar_event_type: meeting, callback, demo, text_followup, manual_review, none.\" +\n        \"\\nrequested_datetime_iso: ISO 8601 datetime string or null.\" +\n        \"\\nrequested_datetime_end_iso: ISO 8601 datetime string or null.\" +\n        \"\\nalternate_phone: phone string or null.\" +\n        \"\\nrecommended_action: short Spanish instruction for Nicolas or null.\" +\n        \"\\nis_spam: boolean.\" +\n        \"\\nconfidence: number from 0 to 1.\" +\n        \"\\nnext_question: short Spanish next question or null.\" +\n        \"\\nsummary: compact Spanish summary of this message.\" +\n        \"\\nbusiness_type: business type if explicitly known, e.g. inmobiliaria, peluquería, clínica, tienda de ropa, veterinaria, barbería, ecommerce, or null.\" +\n        \"\\npain_point: problem the lead wants solved, e.g. responder mensajes, organizar consultas, agendar turnos, no perder clientes, or null.\" +\n        \"\\nlead_stage: new, aware, qualifying, interested, demo_requested, meeting_requested, hot_lead, customer, lost, or null.\" +\n        \"\\nbuying_intent: low, medium, high, urgent, not_interested, or null.\" +\n        \"\\n\\nPayload:\\n\" + JSON.stringify($json)\n    }]\n  }],\n  generationConfig: {\n    temperature: 0.1,\n    responseMimeType: \"application/json\",\n    maxOutputTokens: 1024,\n    thinkingConfig: { thinkingBudget: 0 }\n  }\n}) }}",
+        "body": "={{ JSON.stringify($json.ai_request.body) }}",
         "options": {}
       },
       "id": "gemini-intent-classification",
-      "name": "Gemini Intent Classification",
+      "name": "AI Intent Classification",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -61,7 +55,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const original = $('Set / Normalize Input').item.json;\nconst response = $input.first().json || {};\nlet text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\ntext = String(text).replace(/```json/g, '').replace(/```/g, '').trim();\n\nlet parsed = {};\ntry {\n  parsed = JSON.parse(text);\n} catch (error) {\n  parsed = {};\n}\n\nconst rawMessage = String(original.combined_text || '');\nconst message = rawMessage.toLowerCase();\n\nfunction clean(value) {\n  const text = String(value || '').trim();\n  return text || null;\n}\n\nfunction normalizeIntent(value) {\n  const raw = String(value || 'unknown').toLowerCase().replace(/[\\s-]/g, '_');\n  const aliases = {\n    wantsmeeting: 'wants_meeting', meeting: 'wants_meeting', reunion: 'wants_meeting', reunión: 'wants_meeting',\n    wantsdemo: 'wants_demo', demo: 'wants_demo',\n    wantscallback: 'wants_callback', callback: 'wants_callback', llamada: 'wants_callback',\n    price: 'wants_price', precio: 'wants_price',\n  };\n  return aliases[raw] || raw;\n}\n\nfunction inferBusinessType(msg) {\n  const checks = [\n    ['inmobiliaria', /inmobiliaria|propiedad|departamento|alquiler|venta de casas|bienes ra[ií]ces/],\n    ['peluquería', /peluquer|sal[oó]n de belleza|belleza/],\n    ['barbería', /barber/],\n    ['clínica', /cl[ií]nica|doctor|m[eé]dico|consultorio/],\n    ['psicología', /psic[oó]log/],\n    ['veterinaria', /veterin/],\n    ['tienda de ropa', /ropa|prendas|boutique|tienda/],\n    ['ecommerce', /ecommerce|tienda online|venta online/],\n  ];\n  return checks.find(([, re]) => re.test(msg))?.[0] || null;\n}\n\nfunction inferPainPoint(msg) {\n  if (/respon(d|s).*mensaje|contestar.*mensaje|atiend/.test(msg)) return 'quiere responder mensajes de clientes más rápido';\n  if (/precio|horario|consulta/.test(msg)) return 'recibe consultas repetitivas por WhatsApp';\n  if (/turno|agenda|reserva/.test(msg)) return 'quiere organizar turnos o reservas';\n  if (/no perder|pierdo|perder clientes|seguimiento/.test(msg)) return 'quiere evitar perder clientes y mejorar seguimiento';\n  if (/crm|organizar|ordenar/.test(msg)) return 'quiere organizar consultas y leads';\n  return null;\n}\n\nconst intent = normalizeIntent(parsed.intent);\nconst meetingLike = intent === 'wants_meeting' || intent === 'wants_demo' || intent === 'wants_callback' || /reuni[oó]n|demo|llamada|llamame|agendar|agenda/.test(message);\nconst businessType = clean(parsed.business_type) || inferBusinessType(message);\nconst painPoint = clean(parsed.pain_point) || inferPainPoint(message);\nconst leadStage = clean(parsed.lead_stage) || (meetingLike ? 'meeting_requested' : intent === 'interested' ? 'interested' : 'new');\nconst buyingIntent = clean(parsed.buying_intent) || (meetingLike ? 'high' : intent === 'interested' || intent === 'wants_price' ? 'medium' : null);\n\nreturn [{\n  json: {\n    ...original,\n    classification: parsed,\n    intent,\n    lead_status: parsed.lead_status || leadStage,\n    should_reply: parsed.should_reply !== false,\n    should_update_crm: parsed.should_update_crm !== false,\n    should_handoff: parsed.should_handoff === true || meetingLike || intent === 'wants_human',\n    handoff_reason: parsed.handoff_reason || (meetingLike ? 'User requested a meeting, demo, or callback.' : ''),\n    should_create_calendar_event: parsed.should_create_calendar_event === true,\n    calendar_event_type: parsed.calendar_event_type || 'none',\n    requested_datetime_iso: parsed.requested_datetime_iso || null,\n    requested_datetime_end_iso: parsed.requested_datetime_end_iso || null,\n    alternate_phone: parsed.alternate_phone || null,\n    recommended_action: parsed.recommended_action || '',\n    is_spam: parsed.is_spam === true || intent === 'spam',\n    confidence: Number(parsed.confidence || 0),\n    next_question: parsed.next_question || null,\n    summary: parsed.summary || original.combined_text,\n    business_type: businessType,\n    pain_point: painPoint,\n    lead_stage: leadStage,\n    buying_intent: buyingIntent,\n  },\n}];"
+        "jsCode": "const original = $('Set / Normalize Input').item.json;\nconst response = $input.first().json || {};\nlet text = response.candidates?.[0]?.content?.parts?.[0]?.text\n  || response.choices?.[0]?.message?.content\n  || '{}';\ntext = String(text).replace(/```json/g, '').replace(/```/g, '').trim();\n\nlet parsed = {};\ntry {\n  parsed = JSON.parse(text);\n} catch (error) {\n  parsed = {};\n}\n\nconst rawMessage = String(original.combined_text || '');\nconst message = rawMessage.toLowerCase();\n\nfunction clean(value) {\n  const text = String(value || '').trim();\n  return text || null;\n}\n\nfunction normalizeIntent(value) {\n  const raw = String(value || 'unknown').toLowerCase().replace(/[\\s-]/g, '_');\n  const aliases = {\n    wantsmeeting: 'wants_meeting', meeting: 'wants_meeting', reunion: 'wants_meeting', reunión: 'wants_meeting',\n    wantsdemo: 'wants_demo', demo: 'wants_demo',\n    wantscallback: 'wants_callback', callback: 'wants_callback', llamada: 'wants_callback',\n    price: 'wants_price', precio: 'wants_price',\n  };\n  return aliases[raw] || raw;\n}\n\nfunction inferBusinessType(msg) {\n  const checks = [\n    ['inmobiliaria', /inmobiliaria|propiedad|departamento|alquiler|venta de casas|bienes ra[ií]ces/],\n    ['peluquería', /peluquer|sal[oó]n de belleza|belleza/],\n    ['barbería', /barber/],\n    ['clínica', /cl[ií]nica|doctor|m[eé]dico|consultorio/],\n    ['psicología', /psic[oó]log/],\n    ['veterinaria', /veterin/],\n    ['tienda de ropa', /ropa|prendas|boutique|tienda/],\n    ['ecommerce', /ecommerce|tienda online|venta online/],\n  ];\n  return checks.find(([, re]) => re.test(msg))?.[0] || null;\n}\n\nfunction inferPainPoint(msg) {\n  if (/respon(d|s).*mensaje|contestar.*mensaje|atiend/.test(msg)) return 'quiere responder mensajes de clientes más rápido';\n  if (/precio|horario|consulta/.test(msg)) return 'recibe consultas repetitivas por WhatsApp';\n  if (/turno|agenda|reserva/.test(msg)) return 'quiere organizar turnos o reservas';\n  if (/no perder|pierdo|perder clientes|seguimiento/.test(msg)) return 'quiere evitar perder clientes y mejorar seguimiento';\n  if (/crm|organizar|ordenar/.test(msg)) return 'quiere organizar consultas y leads';\n  return null;\n}\n\nconst intent = normalizeIntent(parsed.intent);\nconst meetingLike = intent === 'wants_meeting' || intent === 'wants_demo' || intent === 'wants_callback' || /reuni[oó]n|demo|llamada|llamame|agendar|agenda/.test(message);\nconst businessType = clean(parsed.business_type) || inferBusinessType(message);\nconst painPoint = clean(parsed.pain_point) || inferPainPoint(message);\nconst leadStage = clean(parsed.lead_stage) || (meetingLike ? 'meeting_requested' : intent === 'interested' ? 'interested' : 'new');\nconst buyingIntent = clean(parsed.buying_intent) || (meetingLike ? 'high' : intent === 'interested' || intent === 'wants_price' ? 'medium' : null);\n\nreturn [{\n  json: {\n    ...original,\n    classification: parsed,\n    intent,\n    lead_status: parsed.lead_status || leadStage,\n    should_reply: parsed.should_reply !== false,\n    should_update_crm: parsed.should_update_crm !== false,\n    should_handoff: parsed.should_handoff === true || meetingLike || intent === 'wants_human',\n    handoff_reason: parsed.handoff_reason || (meetingLike ? 'User requested a meeting, demo, or callback.' : ''),\n    should_create_calendar_event: parsed.should_create_calendar_event === true,\n    calendar_event_type: parsed.calendar_event_type || 'none',\n    requested_datetime_iso: parsed.requested_datetime_iso || null,\n    requested_datetime_end_iso: parsed.requested_datetime_end_iso || null,\n    alternate_phone: parsed.alternate_phone || null,\n    recommended_action: parsed.recommended_action || '',\n    is_spam: parsed.is_spam === true || intent === 'spam',\n    confidence: Number(parsed.confidence || 0),\n    next_question: parsed.next_question || null,\n    summary: parsed.summary || original.combined_text,\n    business_type: businessType,\n    pain_point: painPoint,\n    lead_stage: leadStage,\n    buying_intent: buyingIntent,\n  },\n}];"
       },
       "id": "parse-classification",
       "name": "Parse Classification",
@@ -194,24 +188,18 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_RESPONSE_MODEL || $env.GEMINI_MODEL || 'gemini-2.5-pro') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ $json.ai_request.url }}",
         "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($json.ai_request.headers) }}",
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({\n  systemInstruction: {\n    parts: [{\n      text: [\n        \"You are the WhatsApp assistant for Autobots, Nicolas Vargas' automation agency in Paraguay.\",\n        \"Use the provided memory and continue the conversation naturally. Do not restart the conversation.\",\n        \"Do not greet the user in every message. Use the user's name only occasionally.\",\n        \"If the user is answering the last bot question, treat their message as that answer and move forward.\",\n        \"Never ask again for information already present in lead.business_type, lead.pain_point, memory.conversation_summary, memory.last_user_message, or memory.last_bot_reply.\",\n        \"Never ask 'qué tipo de negocio tenés' if lead.business_type is already known.\",\n        \"Never ask again about the pain point if lead.pain_point is already known.\",\n        \"Ask only one question at a time.\",\n        \"Sell business outcomes: faster WhatsApp replies, fewer lost leads, organized inquiries, automatic follow-up, and human handoff.\",\n        \"Use natural Spanish suitable for Paraguay: clear, warm, professional, not stiff.\",\n        \"Do not sound Argentine. Never use: che, boludo, capo, amigazo, re bueno.\",\n        \"Do not sound too formal. Avoid: estimado cliente, cordialmente, nos complace informarle.\",\n        \"Do not mention n8n, Redis, Docker, Evolution API, Google Calendar, Notion, Telegram, Gemini, APIs, databases, prompts, or workflows.\",\n        \"Do not invent prices. Do not promise guaranteed sales.\",\n        \"Return only the final WhatsApp reply as plain text. No JSON. No markdown.\"\n      ].join(\"\\n\")\n    }]\n  },\n  contents: [{\n    role: \"user\",\n    parts: [{\n      text: \"Generate the next WhatsApp reply using this context. Return only plain text.\\n\\nContext:\\n\" + JSON.stringify($json.ai_context || $json)\n    }]\n  }],\n  generationConfig: {\n    temperature: 0.42,\n    maxOutputTokens: 768,\n    thinkingConfig: { thinkingBudget: 0 }\n  }\n}) }}",
+        "body": "={{ JSON.stringify($json.ai_request.body) }}",
         "options": {}
       },
       "id": "gemini-response-generation",
-      "name": "Gemini Response Generation",
+      "name": "AI Response Generation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -221,7 +209,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const context = $('Build AI Response Context').item.json;\nconst response = $input.first().json || {};\nconst reply = response.candidates?.[0]?.content?.parts\n  ?.map(part => part.text || '')\n  ?.join('')\n  ?.trim()\n  || 'Gracias por escribirme. Nicolás va a revisar tu mensaje y te responde en breve.';\n\nreturn [{\n  json: {\n    ...context,\n    reply_text: reply,\n    should_send_whatsapp: context.should_reply !== false && context.is_spam !== true,\n    gemini_finish_reason: response.candidates?.[0]?.finishReason || '',\n  },\n}];"
+        "jsCode": "const context = $('Build AI Response Context').item.json;\nconst response = $input.first().json || {};\nconst reply = response.candidates?.[0]?.content?.parts\n  ?.map(part => part.text || '')\n  ?.join('')\n  ?.trim()\n  || response.choices?.[0]?.message?.content?.trim()\n  || 'Gracias por escribirme. Nicolás va a revisar tu mensaje y te responde en breve.';\n\nreturn [{\n  json: {\n    ...context,\n    reply_text: reply,\n    should_send_whatsapp: context.should_reply !== false && context.is_spam !== true,\n    ai_finish_reason: response.candidates?.[0]?.finishReason || response.choices?.[0]?.finish_reason || '',\n  },\n}];"
       },
       "id": "parse-response",
       "name": "Parse Generated Response",
@@ -544,6 +532,32 @@
         540
       ],
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the intent-classification request for the configured AI provider.\nconst input = $input.first().json || {};\n\nconst systemText = [\n  \"You are the decision engine for Autobots, Nicolas Vargas' WhatsApp automation agency in Paraguay.\",\n  \"Classify inbound WhatsApp leads and extract useful CRM memory.\",\n  \"Return ONLY valid JSON. No markdown. No explanations. Never invent facts.\",\n  \"Timezone: America/Asuncion.\",\n  \"Do not write the final WhatsApp answer here.\"\n].join(\"\\n\");\n\nconst userText =\n  \"Current date/time in Paraguay: \" + $now.toISO() +\n  \"\\n\\nReturn one JSON object with exactly these keys:\" +\n  \"\\nintent: interested, needs_more_info, wants_price, wants_demo, wants_meeting, wants_callback, wants_human, not_interested, spam, unknown.\" +\n  \"\\nlead_status: new, qualifying, interested, demo_requested, meeting_requested, follow_up_needed, needs_human, not_interested, spam, needs_review.\" +\n  \"\\nshould_reply: boolean.\" +\n  \"\\nshould_update_crm: boolean.\" +\n  \"\\nshould_handoff: boolean.\" +\n  \"\\nhandoff_reason: string or null.\" +\n  \"\\nshould_create_calendar_event: boolean.\" +\n  \"\\ncalendar_event_type: meeting, callback, demo, text_followup, manual_review, none.\" +\n  \"\\nrequested_datetime_iso: ISO 8601 datetime string or null.\" +\n  \"\\nrequested_datetime_end_iso: ISO 8601 datetime string or null.\" +\n  \"\\nalternate_phone: phone string or null.\" +\n  \"\\nrecommended_action: short Spanish instruction for Nicolas or null.\" +\n  \"\\nis_spam: boolean.\" +\n  \"\\nconfidence: number from 0 to 1.\" +\n  \"\\nnext_question: short Spanish next question or null.\" +\n  \"\\nsummary: compact Spanish summary of this message.\" +\n  \"\\nbusiness_type: business type if explicitly known, e.g. inmobiliaria, peluquer\\u00eda, cl\\u00ednica, tienda de ropa, veterinaria, barber\\u00eda, ecommerce, or null.\" +\n  \"\\npain_point: problem the lead wants solved, e.g. responder mensajes, organizar consultas, agendar turnos, no perder clientes, or null.\" +\n  \"\\nlead_stage: new, aware, qualifying, interested, demo_requested, meeting_requested, hot_lead, customer, lost, or null.\" +\n  \"\\nbuying_intent: low, medium, high, urgent, not_interested, or null.\" +\n  \"\\n\\nPayload:\\n\" + JSON.stringify(input);\n\n// Pick the AI provider. AI_PROVIDER=azure uses Azure OpenAI (Student Pack\n// credits), AI_PROVIDER=gemini uses the Gemini API free tier. When\n// AI_PROVIDER is unset, Azure is preferred if it is fully configured.\nconst provider = String(\n  $env.AI_PROVIDER ||\n  (($env.AZURE_OPENAI_ENDPOINT && $env.AZURE_OPENAI_KEY) ? 'azure' : 'gemini')\n).toLowerCase().trim();\n\nlet aiRequest;\nif (provider === 'azure') {\n  const endpoint = String($env.AZURE_OPENAI_ENDPOINT || '').replace(/\\/+$/, '');\n  const deployment = $env.AZURE_OPENAI_CLASSIFICATION_DEPLOYMENT || $env.AZURE_OPENAI_DEPLOYMENT;\n  const apiVersion = $env.AZURE_OPENAI_API_VERSION || '2024-10-21';\n  if (!endpoint || !$env.AZURE_OPENAI_KEY || !deployment) {\n    throw new Error('AI_PROVIDER=azure needs AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY and AZURE_OPENAI_DEPLOYMENT');\n  }\n  aiRequest = {\n    url: endpoint + '/openai/deployments/' + deployment + '/chat/completions?api-version=' + apiVersion,\n    headers: { 'api-key': $env.AZURE_OPENAI_KEY, 'Content-Type': 'application/json' },\n    body: {\n    messages: [\n      { role: 'system', content: systemText },\n      { role: 'user', content: userText },\n    ],\n    temperature: 0.1,\n    max_tokens: 1024,\n    response_format: { type: 'json_object' },\n  },\n  };\n} else {\n  const model = $env.GEMINI_CLASSIFICATION_MODEL || $env.GEMINI_MODEL || 'gemini-2.5-flash';\n  if (!$env.GEMINI_API_KEY) {\n    throw new Error('GEMINI_API_KEY is not configured');\n  }\n  aiRequest = {\n    // The key travels in a header instead of the URL so it cannot leak into\n    // execution logs or anything that records query strings.\n    url: 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent',\n    headers: { 'x-goog-api-key': $env.GEMINI_API_KEY, 'Content-Type': 'application/json' },\n    body: {\n      systemInstruction: { parts: [{ text: systemText }] },\n      contents: [{ role: 'user', parts: [{ text: userText }] }],\n      generationConfig: {\n        temperature: 0.1,\n        responseMimeType: 'application/json',\n        maxOutputTokens: 1024,\n        thinkingConfig: { thinkingBudget: 0 },\n      },\n    },\n  };\n}\n\nreturn [{ json: { ...input, ai_provider: provider, ai_request: aiRequest } }];\n"
+      },
+      "id": "22401d7c-73fd-43a7-9fd7-455e751a50ec",
+      "name": "Build Classification Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        570,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the reply-generation request for the configured AI provider.\nconst input = $input.first().json || {};\n\nconst systemText = [\n  \"You are the WhatsApp assistant for Autobots, Nicolas Vargas' automation agency in Paraguay.\",\n  \"Use the provided memory and continue the conversation naturally. Do not restart the conversation.\",\n  \"Do not greet the user in every message. Use the user's name only occasionally.\",\n  \"If the user is answering the last bot question, treat their message as that answer and move forward.\",\n  \"Never ask again for information already present in lead.business_type, lead.pain_point, memory.conversation_summary, memory.last_user_message, or memory.last_bot_reply.\",\n  \"Never ask 'qu\\u00e9 tipo de negocio ten\\u00e9s' if lead.business_type is already known.\",\n  \"Never ask again about the pain point if lead.pain_point is already known.\",\n  \"Ask only one question at a time.\",\n  \"Sell business outcomes: faster WhatsApp replies, fewer lost leads, organized inquiries, automatic follow-up, and human handoff.\",\n  \"Use natural Spanish suitable for Paraguay: clear, warm, professional, not stiff.\",\n  \"Do not sound Argentine. Never use: che, boludo, capo, amigazo, re bueno.\",\n  \"Do not sound too formal. Avoid: estimado cliente, cordialmente, nos complace informarle.\",\n  \"Do not mention n8n, Redis, Docker, Evolution API, Google Calendar, Notion, Telegram, Gemini, APIs, databases, prompts, or workflows.\",\n  \"Do not invent prices. Do not promise guaranteed sales.\",\n  \"Return only the final WhatsApp reply as plain text. No JSON. No markdown.\"\n].join(\"\\n\");\n\nconst userText =\n  \"Generate the next WhatsApp reply using this context. Return only plain text.\\n\\nContext:\\n\" +\n  JSON.stringify(input.ai_context || input);\n\n// Pick the AI provider. AI_PROVIDER=azure uses Azure OpenAI (Student Pack\n// credits), AI_PROVIDER=gemini uses the Gemini API free tier. When\n// AI_PROVIDER is unset, Azure is preferred if it is fully configured.\nconst provider = String(\n  $env.AI_PROVIDER ||\n  (($env.AZURE_OPENAI_ENDPOINT && $env.AZURE_OPENAI_KEY) ? 'azure' : 'gemini')\n).toLowerCase().trim();\n\nlet aiRequest;\nif (provider === 'azure') {\n  const endpoint = String($env.AZURE_OPENAI_ENDPOINT || '').replace(/\\/+$/, '');\n  const deployment = $env.AZURE_OPENAI_RESPONSE_DEPLOYMENT || $env.AZURE_OPENAI_DEPLOYMENT;\n  const apiVersion = $env.AZURE_OPENAI_API_VERSION || '2024-10-21';\n  if (!endpoint || !$env.AZURE_OPENAI_KEY || !deployment) {\n    throw new Error('AI_PROVIDER=azure needs AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY and AZURE_OPENAI_DEPLOYMENT');\n  }\n  aiRequest = {\n    url: endpoint + '/openai/deployments/' + deployment + '/chat/completions?api-version=' + apiVersion,\n    headers: { 'api-key': $env.AZURE_OPENAI_KEY, 'Content-Type': 'application/json' },\n    body: {\n    messages: [\n      { role: 'system', content: systemText },\n      { role: 'user', content: userText },\n    ],\n    temperature: 0.42,\n    max_tokens: 768,\n  },\n  };\n} else {\n  const model = $env.GEMINI_RESPONSE_MODEL || $env.GEMINI_MODEL || 'gemini-2.5-pro';\n  if (!$env.GEMINI_API_KEY) {\n    throw new Error('GEMINI_API_KEY is not configured');\n  }\n  aiRequest = {\n    url: 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent',\n    headers: { 'x-goog-api-key': $env.GEMINI_API_KEY, 'Content-Type': 'application/json' },\n    body: {\n      systemInstruction: { parts: [{ text: systemText }] },\n      contents: [{ role: 'user', parts: [{ text: userText }] }],\n      generationConfig: {\n        temperature: 0.42,\n        maxOutputTokens: 768,\n        thinkingConfig: { thinkingBudget: 0 },\n      },\n    },\n  };\n}\n\nreturn [{ json: { ...input, ai_provider: provider, ai_request: aiRequest } }];\n"
+      },
+      "id": "f0a55189-b4f3-4c1e-b67c-e973477ccfe8",
+      "name": "Build Reply Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3210,
+        520
+      ]
     }
   ],
   "connections": {
@@ -562,18 +576,7 @@
       "main": [
         [
           {
-            "node": "Gemini Intent Classification",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Intent Classification": {
-      "main": [
-        [
-          {
-            "node": "Parse Classification",
+            "node": "Build Classification Request",
             "type": "main",
             "index": 0
           }
@@ -632,17 +635,6 @@
         [
           {
             "node": "Merge Telegram Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Response Generation": {
-      "main": [
-        [
-          {
-            "node": "Parse Generated Response",
             "type": "main",
             "index": 0
           }
@@ -781,7 +773,7 @@
       "main": [
         [
           {
-            "node": "Gemini Response Generation",
+            "node": "Build Reply Request",
             "type": "main",
             "index": 0
           }
@@ -807,6 +799,50 @@
     "Notion Update Conversation Memory": {
       "main": [
         []
+      ]
+    },
+    "AI Intent Classification": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Response Generation": {
+      "main": [
+        [
+          {
+            "node": "Parse Generated Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Classification Request": {
+      "main": [
+        [
+          {
+            "node": "AI Intent Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reply Request": {
+      "main": [
+        [
+          {
+            "node": "AI Response Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

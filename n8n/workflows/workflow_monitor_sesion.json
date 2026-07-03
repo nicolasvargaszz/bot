@@ -1,5 +1,5 @@
 {
-  "name": "Monitor Sesión WhatsApp",
+  "name": "Autobots - WhatsApp Session Monitor",
   "nodes": [
     {
       "parameters": {
@@ -24,7 +24,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "http://localhost:8080/instance/connectionState/campana-slot2",
+        "url": "={{ ($env.EVOLUTION_SERVER_URL || 'http://evolution-api:8080') + '/instance/connectionState/' + $env.EVOLUTION_INSTANCE }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -80,8 +80,8 @@
     },
     {
       "parameters": {
-        "chatId": "TU_CHAT_ID_TELEGRAM",
-        "text": "🚨 *ALERTA: WhatsApp Desconectado*\n\nLa sesión de Evolution API se desconectó.\n\n*Estado actual:* {{ $json.instance?.state ?? 'desconocido' }}\n\n*Acción requerida:*\n1. Ir a http://localhost:8080/manager\n2. Escanear nuevo QR con el celular\n\n_Timestamp: {{ $now.toISO() }}_",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=🚨 *ALERTA: WhatsApp Desconectado*\n\nLa sesión de Evolution API se desconectó.\n\n*Instancia:* {{ $env.EVOLUTION_INSTANCE }}\n*Estado actual:* {{ $json.instance?.state ?? 'desconocido' }}\n\n*Acción requerida:*\n1. Abrir el manager de Evolution API (túnel SSH en producción)\n2. Escanear nuevo QR con el celular\n\n_Timestamp: {{ $now.toISO() }}_",
         "additionalFields": {
           "parse_mode": "Markdown"
         }
@@ -138,8 +138,7 @@
   },
   "versionId": "1",
   "meta": {
-    "templateCredsSetupCompleted": false,
-    "instanceId": "campana-monitor"
+    "templateCredsSetupCompleted": false
   },
   "tags": []
 }

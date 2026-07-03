@@ -15,7 +15,8 @@ The JSON export is best-effort because n8n node internals can change between ver
 ```mermaid
 flowchart TD
     A[Webhook Trigger] --> B[Set / Normalize Input]
-    B --> C[Gemini Intent Classification]
+    B --> B2[Build Classification Request]
+    B2 --> C[AI Intent Classification]
     C --> D[Parse Classification]
     D --> E{Spam or not interested?}
     E -- yes --> F[Return no action]
@@ -32,7 +33,8 @@ flowchart TD
     N --> P[Merge Telegram Result]
     O --> Q[Build AI Response Context]
     P --> Q
-    Q --> R[Gemini Response Generation]
+    Q --> Q2[Build Reply Request]
+    Q2 --> R[AI Response Generation]
     R --> S[Parse Generated Response]
     S --> T[Anti-Repetition Validate Reply]
     T --> U[Evolution API Send Message]
@@ -92,6 +94,15 @@ The current Python service may also include fields such as `buffer_id`, `message
 Configure these in n8n or Docker:
 
 ```env
+# AI provider: "azure" (Azure OpenAI) or "gemini" (Gemini API free tier).
+# Empty prefers Azure automatically when the Azure variables are set.
+AI_PROVIDER=
+AZURE_OPENAI_ENDPOINT=
+AZURE_OPENAI_KEY=
+AZURE_OPENAI_DEPLOYMENT=
+AZURE_OPENAI_API_VERSION=2024-10-21
+AZURE_OPENAI_CLASSIFICATION_DEPLOYMENT=
+AZURE_OPENAI_RESPONSE_DEPLOYMENT=
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
 GEMINI_CLASSIFICATION_MODEL=gemini-2.5-flash
@@ -108,11 +119,32 @@ N8N_BUFFERED_WEBHOOK_SECRET=
 
 Do not hardcode these values in workflow JSON.
 
+## AI Provider Selection
+
+Both AI calls (classification and reply generation) are built by dedicated
+Code nodes (`Build Classification Request`, `Build Reply Request`) that emit a
+provider-specific `ai_request` object with `url`, `headers`, and `body`. The
+HTTP nodes that follow are provider-agnostic and just execute that request.
+
+- `AI_PROVIDER=azure` uses Azure OpenAI chat completions
+  (`{endpoint}/openai/deployments/{deployment}/chat/completions`), with the
+  key in the `api-key` header. Good fit for the GitHub Student Pack Azure
+  credits.
+- `AI_PROVIDER=gemini` uses `generateContent` on the Gemini API free tier,
+  with the key in the `x-goog-api-key` header (never in the URL, so it cannot
+  leak into execution logs).
+- If `AI_PROVIDER` is empty, Azure is preferred when `AZURE_OPENAI_ENDPOINT`
+  and `AZURE_OPENAI_KEY` are both set; otherwise Gemini is used.
+
+The parse nodes accept both response shapes (`candidates[0].content.parts` for
+Gemini, `choices[0].message.content` for Azure), so switching provider is a
+`.env` change plus a container restart — no workflow edits.
+
 ## Required Credentials
 
 Use n8n credentials where possible:
 
-- Google Gemini API credential, or HTTP Request with `GEMINI_API_KEY` env var.
+- AI provider key through `AZURE_OPENAI_KEY` or `GEMINI_API_KEY` env vars.
 - Notion API token.
 - Telegram Bot credential.
 - Evolution API key passed as `apikey` header.
@@ -160,22 +192,28 @@ Recommended logic:
 
 This creates a stable object for the rest of the workflow.
 
-### 3. Gemini Intent Classification
+### 3. Build Classification Request + AI Intent Classification
 
-Node name:
+Node names:
 
 ```text
-Gemini Intent Classification
+Build Classification Request
+AI Intent Classification
 ```
 
 Goal:
 
 Classify the message before deciding what the workflow should do.
 
-Use Gemini 2.5 Flash by default:
+`Build Classification Request` is a Code node that holds the classification
+prompt and emits the provider-specific `ai_request` (see "AI Provider
+Selection" above). `AI Intent Classification` is a generic HTTP Request node
+that executes it. Use a fast/cheap model for this call: `gpt-4o-mini` on
+Azure, or Gemini 2.5 Flash:
 
 ```env
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_CLASSIFICATION_MODEL=gemini-2.5-flash
+AZURE_OPENAI_CLASSIFICATION_DEPLOYMENT=gpt-4o-mini
 ```
 
 Expected classification JSON:
@@ -211,15 +249,15 @@ Node name:
 Parse Classification
 ```
 
-Use a Code node to parse Gemini JSON defensively.
+Use a Code node to parse the model's JSON defensively (both Gemini and Azure OpenAI response shapes are supported).
 
-Fallback if Gemini returns invalid JSON:
+Fallback if the model returns invalid JSON:
 
 - `intent=unknown`
 - `should_reply=true`
 - `should_update_crm=true`
 - `should_handoff=true`
-- `handoff_reason=Gemini classification JSON parse failed`
+- `handoff_reason=AI classification JSON parse failed`
 
 ### 5. IF: Interested / Not Interested / Needs More Info / Spam
 
@@ -292,7 +330,7 @@ Trigger handoff when:
 - Contact is a hot lead.
 - Contact asks for a human.
 - The message is urgent or angry.
-- Gemini confidence is low.
+- Classification confidence is low.
 - Voice transcription failed and there is not enough context.
 
 ### 8. Telegram Handoff
@@ -322,7 +360,7 @@ Node name:
 Build AI Response Context
 ```
 
-Build a dynamic context object for Gemini instead of rewriting the system prompt.
+Build a dynamic context object for the model instead of rewriting the system prompt.
 
 The context includes:
 
@@ -339,13 +377,18 @@ The context includes:
 
 This is the key memory step. The response model should continue the conversation from this object.
 
-### 10. Gemini Response Generation
+### 10. Build Reply Request + AI Response Generation
 
-Node name:
+Node names:
 
 ```text
-Gemini Response Generation
+Build Reply Request
+AI Response Generation
 ```
+
+`Build Reply Request` holds the reply prompt and emits the provider-specific
+`ai_request`; `AI Response Generation` executes it. Use the stronger model
+here: your main Azure deployment (for example `gpt-4o`) or Gemini 2.5 Pro.
 
 Generate a concise WhatsApp reply using the stable system instruction and the dynamic context from `Build AI Response Context`.
 
