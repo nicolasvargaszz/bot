@@ -13,28 +13,28 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        80,
-        320
+        240,
+        260
       ],
       "webhookId": "autobots-whatsapp-buffer"
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst phone = String(input.phone || '').replace(/\\D+/g, '');\nconst combinedText = String(input.combined_text || input.text || '').replace(/\\s+/g, ' ').trim();\nconst messages = Array.isArray(input.messages) ? input.messages : [];\n\nreturn [{\n  json: {\n    source: input.source || 'message-buffer',\n    instance: input.instance || 'autobots-main',\n    phone,\n    push_name: input.push_name || input.name || '',\n    message_type: input.message_type || (input.contains_audio ? 'audio' : 'text'),\n    combined_text: combinedText,\n    messages,\n    buffer_id: input.buffer_id || '',\n    received_at: new Date().toISOString(),\n  },\n}];"
+        "jsCode": "const webhookItem = $input.first().json || {};\nconst headers = webhookItem.headers || {};\nconst expectedWebhookSecret = String($env.N8N_BUFFERED_WEBHOOK_SECRET || '').trim();\nconst receivedWebhookSecret = String(\n  headers['x-autobots-webhook-secret'] ||\n  headers['X-Autobots-Webhook-Secret'] ||\n  ''\n).trim();\n\nif (!expectedWebhookSecret) {\n  throw new Error('N8N_BUFFERED_WEBHOOK_SECRET is not configured');\n}\n\nif (receivedWebhookSecret !== expectedWebhookSecret) {\n  throw new Error('Unauthorized webhook request');\n}\n\n// n8n Webhook Trigger wraps the real HTTP payload inside `body`.\n// Manual tests or older exports may pass the payload directly, so support both shapes.\nlet input = webhookItem;\nif (webhookItem.body !== undefined) {\n  if (typeof webhookItem.body === 'string') {\n    try {\n      input = JSON.parse(webhookItem.body || '{}');\n    } catch (error) {\n      input = {};\n    }\n  } else if (webhookItem.body && typeof webhookItem.body === 'object') {\n    input = webhookItem.body;\n  }\n}\n\nconst onlyDigits = (value) => String(value || '').replace(/\\D+/g, '');\n\n// Normal expected payload from the FastAPI message-buffer service.\nlet phone = onlyDigits(input.phone);\nlet messages = Array.isArray(input.messages) ? input.messages : [];\nlet rawText = input.combined_text || input.text || input.message || '';\nlet pushName = input.push_name || input.name || '';\nlet messageType = input.message_type || input.type || 'text';\nlet instance = input.instance || 'autobots-main';\nlet bufferId = input.buffer_id || '';\nlet receivedAt = input.received_at || new Date().toISOString();\nlet containsAudio = input.contains_audio === true || messageType === 'audio';\n\n// Defensive fallback: if this node is accidentally called with an Evolution-style payload,\n// extract the same normalized fields instead of returning empty data.\nif ((!phone || !rawText) && input.data && typeof input.data === 'object') {\n  const data = input.data;\n  const key = data.key || {};\n  const jid = key.remoteJidAlt || key.remoteJid || '';\n  const message = data.message || {};\n\n  phone = phone || onlyDigits(jid.split('@')[0]);\n  pushName = pushName || data.pushName || '';\n  instance = input.instance || data.instance || instance;\n  messageType = data.messageType || messageType;\n  rawText = rawText ||\n    message.conversation ||\n    message.extendedTextMessage?.text ||\n    message.imageMessage?.caption ||\n    message.videoMessage?.caption ||\n    '';\n  receivedAt = data.messageTimestamp\n    ? new Date(Number(data.messageTimestamp) * 1000).toISOString()\n    : receivedAt;\n}\n\nlet combinedText = String(rawText || '').replace(/\\s+/g, ' ').trim();\n\nif (!combinedText && messages.length) {\n  combinedText = messages\n    .map((message) => message.text || message.body || message.transcription || '')\n    .filter(Boolean)\n    .join(' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nif (!combinedText && containsAudio) {\n  combinedText = 'Recibí un audio, pero por ahora Nicolás va a revisarlo manualmente.';\n}\n\nreturn [{\n  json: {\n    source: input.source || 'message-buffer',\n    instance,\n    phone,\n    push_name: pushName,\n    message_type: messageType || (containsAudio ? 'audio' : 'text'),\n    combined_text: combinedText,\n    messages,\n    message_count: Number(input.message_count || messages.length || (combinedText ? 1 : 0)),\n    buffer_id: bufferId,\n    received_at: receivedAt,\n    contains_audio: containsAudio,\n  },\n}];"
       },
       "id": "set-normalize-input",
       "name": "Set / Normalize Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        320,
-        320
+        460,
+        260
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_MODEL || 'gemini-2.5-flash') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_CLASSIFICATION_MODEL || $env.GEMINI_MODEL || 'gemini-2.5-flash') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -45,29 +45,31 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"text\": \"Classify this WhatsApp lead message for Autobots, an agency selling WhatsApp automation to Paraguayan businesses. Return ONLY valid JSON with keys: intent, lead_status, should_reply, should_update_crm, should_handoff, handoff_reason, is_spam, confidence, next_question, summary. Allowed intent values: interested, not_interested, needs_more_info, spam, unknown. Message: {{ JSON.stringify($json.combined_text) }}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.2,\n    \"responseMimeType\": \"application/json\"\n  }\n}"
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  systemInstruction: {\n    parts: [{\n      text: [\n        \"You are the decision engine for Autobots, Nicolas Vargas' WhatsApp automation agency in Paraguay.\",\n        \"Classify inbound WhatsApp leads and extract useful CRM memory.\",\n        \"Return ONLY valid JSON. No markdown. No explanations. Never invent facts.\",\n        \"Timezone: America/Asuncion.\",\n        \"Do not write the final WhatsApp answer here.\"\n      ].join(\"\\n\")\n    }]\n  },\n  contents: [{\n    role: \"user\",\n    parts: [{\n      text:\n        \"Current date/time in Paraguay: \" + $now.toISO() +\n        \"\\n\\nReturn one JSON object with exactly these keys:\" +\n        \"\\nintent: interested, needs_more_info, wants_price, wants_demo, wants_meeting, wants_callback, wants_human, not_interested, spam, unknown.\" +\n        \"\\nlead_status: new, qualifying, interested, demo_requested, meeting_requested, follow_up_needed, needs_human, not_interested, spam, needs_review.\" +\n        \"\\nshould_reply: boolean.\" +\n        \"\\nshould_update_crm: boolean.\" +\n        \"\\nshould_handoff: boolean.\" +\n        \"\\nhandoff_reason: string or null.\" +\n        \"\\nshould_create_calendar_event: boolean.\" +\n        \"\\ncalendar_event_type: meeting, callback, demo, text_followup, manual_review, none.\" +\n        \"\\nrequested_datetime_iso: ISO 8601 datetime string or null.\" +\n        \"\\nrequested_datetime_end_iso: ISO 8601 datetime string or null.\" +\n        \"\\nalternate_phone: phone string or null.\" +\n        \"\\nrecommended_action: short Spanish instruction for Nicolas or null.\" +\n        \"\\nis_spam: boolean.\" +\n        \"\\nconfidence: number from 0 to 1.\" +\n        \"\\nnext_question: short Spanish next question or null.\" +\n        \"\\nsummary: compact Spanish summary of this message.\" +\n        \"\\nbusiness_type: business type if explicitly known, e.g. inmobiliaria, peluquería, clínica, tienda de ropa, veterinaria, barbería, ecommerce, or null.\" +\n        \"\\npain_point: problem the lead wants solved, e.g. responder mensajes, organizar consultas, agendar turnos, no perder clientes, or null.\" +\n        \"\\nlead_stage: new, aware, qualifying, interested, demo_requested, meeting_requested, hot_lead, customer, lost, or null.\" +\n        \"\\nbuying_intent: low, medium, high, urgent, not_interested, or null.\" +\n        \"\\n\\nPayload:\\n\" + JSON.stringify($json)\n    }]\n  }],\n  generationConfig: {\n    temperature: 0.1,\n    responseMimeType: \"application/json\",\n    maxOutputTokens: 1024,\n    thinkingConfig: { thinkingBudget: 0 }\n  }\n}) }}",
+        "options": {}
       },
       "id": "gemini-intent-classification",
       "name": "Gemini Intent Classification",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        580,
-        320
+        680,
+        260
       ]
     },
     {
       "parameters": {
-        "jsCode": "const original = $('Set / Normalize Input').item.json;\nconst response = $input.first().json;\nconst text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nlet parsed = {};\ntry {\n  parsed = JSON.parse(text);\n} catch (error) {\n  parsed = {\n    intent: 'unknown',\n    lead_status: 'needs_review',\n    should_reply: true,\n    should_update_crm: true,\n    should_handoff: true,\n    handoff_reason: 'Gemini classification JSON parse failed',\n    is_spam: false,\n    confidence: 0,\n    next_question: null,\n    summary: original.combined_text,\n  };\n}\n\nreturn [{\n  json: {\n    ...original,\n    classification: parsed,\n    intent: parsed.intent || 'unknown',\n    lead_status: parsed.lead_status || 'new',\n    should_reply: parsed.should_reply !== false,\n    should_update_crm: parsed.should_update_crm !== false,\n    should_handoff: parsed.should_handoff === true,\n    handoff_reason: parsed.handoff_reason || '',\n    is_spam: parsed.is_spam === true || parsed.intent === 'spam',\n    summary: parsed.summary || original.combined_text,\n  },\n}];"
+        "jsCode": "const original = $('Set / Normalize Input').item.json;\nconst response = $input.first().json || {};\nlet text = response.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\ntext = String(text).replace(/```json/g, '').replace(/```/g, '').trim();\n\nlet parsed = {};\ntry {\n  parsed = JSON.parse(text);\n} catch (error) {\n  parsed = {};\n}\n\nconst rawMessage = String(original.combined_text || '');\nconst message = rawMessage.toLowerCase();\n\nfunction clean(value) {\n  const text = String(value || '').trim();\n  return text || null;\n}\n\nfunction normalizeIntent(value) {\n  const raw = String(value || 'unknown').toLowerCase().replace(/[\\s-]/g, '_');\n  const aliases = {\n    wantsmeeting: 'wants_meeting', meeting: 'wants_meeting', reunion: 'wants_meeting', reunión: 'wants_meeting',\n    wantsdemo: 'wants_demo', demo: 'wants_demo',\n    wantscallback: 'wants_callback', callback: 'wants_callback', llamada: 'wants_callback',\n    price: 'wants_price', precio: 'wants_price',\n  };\n  return aliases[raw] || raw;\n}\n\nfunction inferBusinessType(msg) {\n  const checks = [\n    ['inmobiliaria', /inmobiliaria|propiedad|departamento|alquiler|venta de casas|bienes ra[ií]ces/],\n    ['peluquería', /peluquer|sal[oó]n de belleza|belleza/],\n    ['barbería', /barber/],\n    ['clínica', /cl[ií]nica|doctor|m[eé]dico|consultorio/],\n    ['psicología', /psic[oó]log/],\n    ['veterinaria', /veterin/],\n    ['tienda de ropa', /ropa|prendas|boutique|tienda/],\n    ['ecommerce', /ecommerce|tienda online|venta online/],\n  ];\n  return checks.find(([, re]) => re.test(msg))?.[0] || null;\n}\n\nfunction inferPainPoint(msg) {\n  if (/respon(d|s).*mensaje|contestar.*mensaje|atiend/.test(msg)) return 'quiere responder mensajes de clientes más rápido';\n  if (/precio|horario|consulta/.test(msg)) return 'recibe consultas repetitivas por WhatsApp';\n  if (/turno|agenda|reserva/.test(msg)) return 'quiere organizar turnos o reservas';\n  if (/no perder|pierdo|perder clientes|seguimiento/.test(msg)) return 'quiere evitar perder clientes y mejorar seguimiento';\n  if (/crm|organizar|ordenar/.test(msg)) return 'quiere organizar consultas y leads';\n  return null;\n}\n\nconst intent = normalizeIntent(parsed.intent);\nconst meetingLike = intent === 'wants_meeting' || intent === 'wants_demo' || intent === 'wants_callback' || /reuni[oó]n|demo|llamada|llamame|agendar|agenda/.test(message);\nconst businessType = clean(parsed.business_type) || inferBusinessType(message);\nconst painPoint = clean(parsed.pain_point) || inferPainPoint(message);\nconst leadStage = clean(parsed.lead_stage) || (meetingLike ? 'meeting_requested' : intent === 'interested' ? 'interested' : 'new');\nconst buyingIntent = clean(parsed.buying_intent) || (meetingLike ? 'high' : intent === 'interested' || intent === 'wants_price' ? 'medium' : null);\n\nreturn [{\n  json: {\n    ...original,\n    classification: parsed,\n    intent,\n    lead_status: parsed.lead_status || leadStage,\n    should_reply: parsed.should_reply !== false,\n    should_update_crm: parsed.should_update_crm !== false,\n    should_handoff: parsed.should_handoff === true || meetingLike || intent === 'wants_human',\n    handoff_reason: parsed.handoff_reason || (meetingLike ? 'User requested a meeting, demo, or callback.' : ''),\n    should_create_calendar_event: parsed.should_create_calendar_event === true,\n    calendar_event_type: parsed.calendar_event_type || 'none',\n    requested_datetime_iso: parsed.requested_datetime_iso || null,\n    requested_datetime_end_iso: parsed.requested_datetime_end_iso || null,\n    alternate_phone: parsed.alternate_phone || null,\n    recommended_action: parsed.recommended_action || '',\n    is_spam: parsed.is_spam === true || intent === 'spam',\n    confidence: Number(parsed.confidence || 0),\n    next_question: parsed.next_question || null,\n    summary: parsed.summary || original.combined_text,\n    business_type: businessType,\n    pain_point: painPoint,\n    lead_stage: leadStage,\n    buying_intent: buyingIntent,\n  },\n}];"
       },
       "id": "parse-classification",
       "name": "Parse Classification",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        840,
-        320
+        900,
+        260
       ]
     },
     {
@@ -76,7 +78,7 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "loose"
           },
           "conditions": [
             {
@@ -98,8 +100,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.1,
       "position": [
-        1100,
-        320
+        1120,
+        260
       ]
     },
     {
@@ -124,18 +126,21 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
-        "jsonBody": "={\n  \"parent\": { \"database_id\": $env.NOTION_DATABASE_ID },\n  \"properties\": {\n    \"Phone\": { \"title\": [{ \"text\": { \"content\": $json.phone } }] },\n    \"Name\": { \"rich_text\": [{ \"text\": { \"content\": $json.push_name || 'Unknown' } }] },\n    \"Status\": { \"select\": { \"name\": $json.lead_status || 'new' } },\n    \"Intent\": { \"select\": { \"name\": $json.intent || 'unknown' } },\n    \"Last Message\": { \"rich_text\": [{ \"text\": { \"content\": $json.combined_text.substring(0, 1900) } }] },\n    \"Summary\": { \"rich_text\": [{ \"text\": { \"content\": ($json.summary || '').substring(0, 1900) } }] }\n  }\n}"
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ (() => {\n  const rt = (value) => ({ rich_text: String(value || '').trim() ? [{ text: { content: String(value || '').slice(0, 1900) } }] : [] });\n  const title = (value) => ({ title: [{ text: { content: String(value || 'unknown').slice(0, 200) } }] });\n  const select = (value, fallback) => ({ select: { name: String(value || fallback).slice(0, 100) } });\n  const count = Number($json.messages_count || 0) + 1;\n  const conversationSummary = String($json.previous_conversation_summary || $json.summary || $json.combined_text || '').slice(0, 1900);\n  return JSON.stringify({\n    parent: { database_id: $env.NOTION_DATABASE_ID },\n    properties: {\n      Phone: title($json.phone || 'unknown'),\n      Text: { phone_number: String($json.phone || '') },\n      Status: select($json.lead_status || $json.lead_stage, 'new'),\n      Intent: select($json.intent, 'unknown'),\n      \"Last Message\": rt($json.combined_text),\n      Summary: rt($json.summary || $json.combined_text),\n      \"Business Type\": rt($json.business_type),\n      \"Pain Point\": rt($json.pain_point),\n      \"Conversation Summary\": rt(conversationSummary),\n      \"Last User Message\": rt($json.combined_text),\n      \"Last Bot Reply\": rt(''),\n      \"Last Contact At\": { date: { start: $now.toISO() } },\n      \"Lead Stage\": select($json.lead_stage || $json.lead_status, 'new'),\n      \"Buying Intent\": select($json.buying_intent, 'medium'),\n      \"Repetition Risk\": { checkbox: false },\n      \"Messages Count\": { number: count }\n    }\n  });\n})() }}",
+        "options": {}
       },
       "id": "notion-create-update-lead",
-      "name": "Notion Create or Update Lead",
+      "name": "Notion Create Lead",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1360,
-        420
+        2000,
+        500
       ],
-      "notes": "Template node. In production, search by phone first, then update existing page or create a new page."
+      "notes": "Template node. In production, search by phone first, then update existing page or create a new page.",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -165,8 +170,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.1,
       "position": [
-        1620,
-        420
+        2440,
+        380
       ]
     },
     {
@@ -182,14 +187,14 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1880,
-        300
+        2660,
+        260
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_MODEL || 'gemini-2.5-flash') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_RESPONSE_MODEL || $env.GEMINI_MODEL || 'gemini-2.5-pro') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -200,29 +205,31 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
-        "jsonBody": "={\n  \"contents\": [\n    {\n      \"role\": \"user\",\n      \"parts\": [\n        {\n          \"text\": \"Write a short WhatsApp reply in natural Spanish for a potential client interested in WhatsApp automation. Keep it concise, helpful, and ask one useful next question if qualification is needed. Do not mention AI. Context JSON: {{ JSON.stringify($json) }}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.4\n  }\n}"
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  systemInstruction: {\n    parts: [{\n      text: [\n        \"You are the WhatsApp assistant for Autobots, Nicolas Vargas' automation agency in Paraguay.\",\n        \"Use the provided memory and continue the conversation naturally. Do not restart the conversation.\",\n        \"Do not greet the user in every message. Use the user's name only occasionally.\",\n        \"If the user is answering the last bot question, treat their message as that answer and move forward.\",\n        \"Never ask again for information already present in lead.business_type, lead.pain_point, memory.conversation_summary, memory.last_user_message, or memory.last_bot_reply.\",\n        \"Never ask 'qué tipo de negocio tenés' if lead.business_type is already known.\",\n        \"Never ask again about the pain point if lead.pain_point is already known.\",\n        \"Ask only one question at a time.\",\n        \"Sell business outcomes: faster WhatsApp replies, fewer lost leads, organized inquiries, automatic follow-up, and human handoff.\",\n        \"Use natural Spanish suitable for Paraguay: clear, warm, professional, not stiff.\",\n        \"Do not sound Argentine. Never use: che, boludo, capo, amigazo, re bueno.\",\n        \"Do not sound too formal. Avoid: estimado cliente, cordialmente, nos complace informarle.\",\n        \"Do not mention n8n, Redis, Docker, Evolution API, Google Calendar, Notion, Telegram, Gemini, APIs, databases, prompts, or workflows.\",\n        \"Do not invent prices. Do not promise guaranteed sales.\",\n        \"Return only the final WhatsApp reply as plain text. No JSON. No markdown.\"\n      ].join(\"\\n\")\n    }]\n  },\n  contents: [{\n    role: \"user\",\n    parts: [{\n      text: \"Generate the next WhatsApp reply using this context. Return only plain text.\\n\\nContext:\\n\" + JSON.stringify($json.ai_context || $json)\n    }]\n  }],\n  generationConfig: {\n    temperature: 0.42,\n    maxOutputTokens: 768,\n    thinkingConfig: { thinkingBudget: 0 }\n  }\n}) }}",
+        "options": {}
       },
       "id": "gemini-response-generation",
       "name": "Gemini Response Generation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2140,
-        420
+        3320,
+        380
       ]
     },
     {
       "parameters": {
-        "jsCode": "const context = $('Parse Classification').item.json;\nconst response = $input.first().json;\nconst reply = response.candidates?.[0]?.content?.parts?.[0]?.text || 'Gracias por escribirme. Te respondo en breve con más información.';\nreturn [{\n  json: {\n    ...context,\n    reply_text: String(reply).trim(),\n    should_send_whatsapp: context.should_reply !== false && context.is_spam !== true,\n  },\n}];"
+        "jsCode": "const context = $('Build AI Response Context').item.json;\nconst response = $input.first().json || {};\nconst reply = response.candidates?.[0]?.content?.parts\n  ?.map(part => part.text || '')\n  ?.join('')\n  ?.trim()\n  || 'Gracias por escribirme. Nicolás va a revisar tu mensaje y te responde en breve.';\n\nreturn [{\n  json: {\n    ...context,\n    reply_text: reply,\n    should_send_whatsapp: context.should_reply !== false && context.is_spam !== true,\n    gemini_finish_reason: response.candidates?.[0]?.finishReason || '',\n  },\n}];"
       },
       "id": "parse-response",
       "name": "Parse Generated Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2400,
-        420
+        3540,
+        380
       ]
     },
     {
@@ -243,22 +250,24 @@
           ]
         },
         "sendBody": true,
-        "contentType": "json",
-        "jsonBody": "={\n  \"number\": $json.phone,\n  \"text\": $json.reply_text\n}"
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  number: String($json.phone || ''),\n  text: String($json.reply_text || 'Gracias por escribirme. Nicolás va a revisar tu mensaje y te responde en breve.')\n}) }}",
+        "options": {}
       },
       "id": "evolution-send-message",
       "name": "Evolution API Send Message",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2660,
-        420
+        3980,
+        380
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"ok\": true,\n  \"phone\": $('Parse Classification').item.json.phone,\n  \"intent\": $('Parse Classification').item.json.intent,\n  \"handoff\": $('Parse Classification').item.json.should_handoff === true,\n  \"reply_sent\": $('Parse Generated Response').item.json.should_send_whatsapp === true\n}",
+        "responseBody": "={{ JSON.stringify({\n  ok: true,\n  phone: $('Anti-Repetition Validate Reply').item.json.phone,\n  intent: $('Anti-Repetition Validate Reply').item.json.intent,\n  handoff: $('Anti-Repetition Validate Reply').item.json.should_handoff === true,\n  reply_sent: $('Anti-Repetition Validate Reply').item.json.should_send_whatsapp === true,\n  memory_page_id: $('Anti-Repetition Validate Reply').item.json.notion_page_id || '',\n  repetition_adjusted: $('Anti-Repetition Validate Reply').item.json.reply_was_adjusted === true,\n}) }}",
         "options": {}
       },
       "id": "respond-to-buffer",
@@ -266,14 +275,14 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2920,
-        420
+        4200,
+        380
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"ok\": true,\n  \"ignored\": true,\n  \"reason\": $json.intent || 'spam_or_not_interested'\n}",
+        "responseBody": "={{ JSON.stringify({\n  ok: true,\n  ignored: true,\n  reason: $json.intent || 'spam_or_not_interested'\n}) }}",
         "options": {}
       },
       "id": "respond-no-action",
@@ -281,8 +290,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1360,
-        180
+        1340,
+        80
       ]
     },
     {
@@ -312,6 +321,229 @@
         340,
         720
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.notion.com/v1/databases/' + $env.NOTION_DATABASE_ID + '/query' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.NOTION_TOKEN }}"
+            },
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({\n  filter: {\n    property: \"Phone\",\n    title: { equals: String($json.phone || '') }\n  },\n  page_size: 1\n}) }}",
+        "options": {}
+      },
+      "id": "82f6d339-db7a-477a-ad51-8e245830b141",
+      "name": "Notion Search Lead By Phone",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        380
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Parse Classification').item.json;\nconst query = $input.first().json || {};\nconst existing = Array.isArray(query.results) && query.results.length > 0 ? query.results[0] : null;\nconst props = existing?.properties || {};\n\nfunction rich(name) {\n  const prop = props[name];\n  if (!prop) return '';\n  const parts = prop.rich_text || prop.title || [];\n  return parts.map(part => part.plain_text || part.text?.content || '').join('').trim();\n}\nfunction title(name) {\n  return (props[name]?.title || []).map(part => part.plain_text || part.text?.content || '').join('').trim();\n}\nfunction select(name) { return props[name]?.select?.name || ''; }\nfunction phone(name) { return props[name]?.phone_number || ''; }\nfunction date(name) { return props[name]?.date?.start || ''; }\nfunction checkbox(name) { return props[name]?.checkbox === true; }\nfunction number(name) { return typeof props[name]?.number === 'number' ? props[name].number : 0; }\n\nconst memory = {\n  phone: title('Phone') || lead.phone || '',\n  name: rich('Name') || lead.push_name || '',\n  text_phone: phone('Text') || lead.phone || '',\n  status: select('Status') || lead.lead_status || 'new',\n  intent: select('Intent') || lead.intent || 'unknown',\n  business_type: rich('Business Type'),\n  pain_point: rich('Pain Point'),\n  conversation_summary: rich('Conversation Summary') || rich('Summary'),\n  last_user_message: rich('Last User Message') || rich('Last Message'),\n  last_bot_reply: rich('Last Bot Reply'),\n  lead_stage: select('Lead Stage'),\n  buying_intent: select('Buying Intent'),\n  repetition_risk: checkbox('Repetition Risk'),\n  messages_count: number('Messages Count'),\n  last_contact_at: date('Last Contact At'),\n};\n\nreturn [{\n  json: {\n    ...lead,\n    notion_exists: Boolean(existing),\n    notion_page_id: existing?.id || '',\n    notion_page_url: existing?.url || '',\n    notion_memory: memory,\n    business_type: lead.business_type || memory.business_type || null,\n    pain_point: lead.pain_point || memory.pain_point || null,\n    lead_stage: lead.lead_stage || memory.lead_stage || lead.lead_status || 'new',\n    buying_intent: lead.buying_intent || memory.buying_intent || null,\n    previous_conversation_summary: memory.conversation_summary || '',\n    previous_last_user_message: memory.last_user_message || '',\n    previous_last_bot_reply: memory.last_bot_reply || '',\n    messages_count: memory.messages_count || 0,\n  },\n}];"
+      },
+      "id": "f013caa8-b58c-470b-9bb3-b44ad9870d52",
+      "name": "Build Lead Memory From Notion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "73a01952-a888-4fa6-a698-eb2dbbefa44b",
+              "leftValue": "={{ $json.notion_exists === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "dacbb260-377f-48b1-a8dd-bd206348e5cd",
+      "name": "IF: Existing Notion Lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1780,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://api.notion.com/v1/pages/' + $json.notion_page_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.NOTION_TOKEN }}"
+            },
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ (() => {\n  const rt = (value) => ({ rich_text: String(value || '').trim() ? [{ text: { content: String(value || '').slice(0, 1900) } }] : [] });\n  const title = (value) => ({ title: [{ text: { content: String(value || 'unknown').slice(0, 200) } }] });\n  const select = (value, fallback) => ({ select: { name: String(value || fallback).slice(0, 100) } });\n  const count = Number($json.messages_count || 0) + 1;\n  const conversationSummary = String($json.previous_conversation_summary || $json.summary || $json.combined_text || '').slice(0, 1900);\n  return JSON.stringify({\n    properties: {\n      Phone: title($json.phone || 'unknown'),\n      Text: { phone_number: String($json.phone || '') },\n      Status: select($json.lead_status || $json.lead_stage, 'new'),\n      Intent: select($json.intent, 'unknown'),\n      \"Last Message\": rt($json.combined_text),\n      Summary: rt($json.summary || $json.combined_text),\n      \"Business Type\": rt($json.business_type),\n      \"Pain Point\": rt($json.pain_point),\n      \"Conversation Summary\": rt(conversationSummary),\n      \"Last User Message\": rt($json.combined_text),\n      \"Last Contact At\": { date: { start: $now.toISO() } },\n      \"Lead Stage\": select($json.lead_stage || $json.lead_status, 'new'),\n      \"Buying Intent\": select($json.buying_intent, 'medium'),\n      \"Repetition Risk\": { checkbox: false },\n      \"Messages Count\": { number: count }\n    }\n  });\n})() }}",
+        "options": {}
+      },
+      "id": "27b61049-f139-47fe-82c8-5622b51cf014",
+      "name": "Notion Update Existing Lead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        260
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $('Build Lead Memory From Notion').item.json;\nconst notion = $input.first().json || {};\nconst pageId = notion.id || context.notion_page_id || '';\nconst pageUrl = notion.url || context.notion_page_url || '';\nreturn [{\n  json: {\n    ...context,\n    notion_saved: Boolean(pageId) && !notion.error,\n    notion_operation: context.notion_exists ? 'updated_existing_lead' : 'created_new_lead',\n    notion_page_id: pageId,\n    notion_page_url: pageUrl,\n    notion_error: notion.error?.message || notion.message || '',\n  },\n}];"
+      },
+      "id": "c86d6d87-cff8-4598-901e-096854055f3e",
+      "name": "Merge Notion Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json || {};\nreturn [{\n  json: {\n    ...input,\n    telegram_handoff_sent: false,\n    telegram_message_id: '',\n  },\n}];"
+      },
+      "id": "ef07c119-0fb0-43f7-8310-3cb93c70773d",
+      "name": "Set Telegram Skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $('Merge Notion Result').item.json;\nconst telegram = $input.first().json || {};\nreturn [{\n  json: {\n    ...context,\n    telegram_handoff_sent: !telegram.error,\n    telegram_message_id: telegram.message_id || telegram.result?.message_id || '',\n    telegram_error: telegram.error?.message || '',\n  },\n}];"
+      },
+      "id": "646279d4-f1d2-418c-aa65-4ecd2223b92b",
+      "name": "Merge Telegram Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json || {};\nconst memory = input.notion_memory || {};\nconst businessType = input.business_type || memory.business_type || null;\nconst painPoint = input.pain_point || memory.pain_point || null;\nconst leadStage = input.lead_stage || memory.lead_stage || input.lead_status || 'new';\nconst buyingIntent = input.buying_intent || memory.buying_intent || null;\nconst lastBotReply = memory.last_bot_reply || input.previous_last_bot_reply || '';\nconst lastUserMessage = memory.last_user_message || input.previous_last_user_message || '';\nconst conversationSummary = memory.conversation_summary || input.previous_conversation_summary || '';\nconst messagesCount = Number(memory.messages_count || input.messages_count || 0);\n\nconst aiContext = {\n  current_message: input.combined_text || '',\n  lead: {\n    phone: input.phone || '',\n    name: input.push_name || memory.name || '',\n    business_type: businessType,\n    pain_point: painPoint,\n    status: input.lead_status || memory.status || 'new',\n    intent: input.intent || memory.intent || 'unknown',\n    lead_stage: leadStage,\n    buying_intent: buyingIntent,\n  },\n  memory: {\n    conversation_summary: conversationSummary,\n    last_user_message: lastUserMessage,\n    last_bot_reply: lastBotReply,\n    messages_count: messagesCount,\n  },\n  workflow_decision: {\n    should_handoff: input.should_handoff === true,\n    handoff_reason: input.handoff_reason || null,\n    should_create_calendar_event: input.should_create_calendar_event === true,\n    calendar_event_type: input.calendar_event_type || 'none',\n    requested_datetime_iso: input.requested_datetime_iso || null,\n    requested_datetime_end_iso: input.requested_datetime_end_iso || null,\n    notion_saved: input.notion_saved === true,\n    telegram_handoff_sent: input.telegram_handoff_sent === true,\n  },\n  conversation_behavior_rules: {\n    do_not_greet_repeatedly: true,\n    use_name_only_occasionally: true,\n    do_not_repeat_questions: true,\n    continue_from_last_bot_reply: true,\n    ask_one_question_at_a_time: true,\n    never_ask_business_type_if_known: Boolean(businessType),\n    never_ask_pain_point_if_known: Boolean(painPoint),\n  },\n};\n\nreturn [{\n  json: {\n    ...input,\n    business_type: businessType,\n    pain_point: painPoint,\n    lead_stage: leadStage,\n    buying_intent: buyingIntent,\n    previous_conversation_summary: conversationSummary,\n    previous_last_user_message: lastUserMessage,\n    previous_last_bot_reply: lastBotReply,\n    messages_count: messagesCount,\n    ai_context: aiContext,\n  },\n}];"
+      },
+      "id": "b4ad8ffb-90b8-4d73-ac71-7338bf428438",
+      "name": "Build AI Response Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json || {};\nlet reply = String(input.reply_text || '').trim();\nconst lastBot = String(input.previous_last_bot_reply || input.ai_context?.memory?.last_bot_reply || '').trim();\nconst current = String(input.combined_text || '').trim();\nconst businessType = String(input.business_type || input.ai_context?.lead?.business_type || '').trim();\nconst painPoint = String(input.pain_point || input.ai_context?.lead?.pain_point || '').trim();\n\nfunction normalize(text) {\n  return String(text || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9ñ\\s]/g, ' ').replace(/\\s+/g, ' ').trim();\n}\nfunction similarity(a, b) {\n  const aw = new Set(normalize(a).split(' ').filter(Boolean));\n  const bw = new Set(normalize(b).split(' ').filter(Boolean));\n  if (!aw.size || !bw.size) return 0;\n  return [...aw].filter(word => bw.has(word)).length / Math.max(aw.size, bw.size);\n}\nfunction startsWithGreeting(text) { return /^(hola|buenas|qué tal|que tal|hola\\s+[a-záéíóúñ]+)/i.test(String(text || '').trim()); }\nfunction removeOpeningGreeting(text) { return String(text || '').replace(/^(hola|buenas|qué tal|que tal)(\\s+[A-Za-zÁÉÍÓÚáéíóúÑñ]+)?[!,\\.\\s]*/i, '').trim(); }\nfunction asksBusinessType(text) { return /qué tipo de negocio|que tipo de negocio|a qué se dedica|a que se dedica/i.test(text); }\nfunction asksPainPoint(text) { return /qué consultas|que consultas|qué mensajes|que mensajes|qué problema|que problema|qué necesitás automatizar|que necesitas automatizar/i.test(text); }\nfunction fallbackForwardQuestion() {\n  if (businessType && painPoint) return `Perfecto. Con eso ya se puede armar una demo bastante enfocada para ${businessType}. ¿Querés que Nicolás te muestre cómo quedaría el flujo de respuestas por WhatsApp?`;\n  if (businessType) return `Perfecto, para ${businessType} suele servir mucho para responder consultas repetidas y ordenar interesados. ¿Querés que te muestre una demo pensada para ese tipo de negocio?`;\n  return 'Perfecto, te entiendo. La idea es ayudarte a responder más rápido por WhatsApp y no perder consultas importantes. ¿Querés que Nicolás te muestre una demo corta?';\n}\n\nlet repetitionRisk = false;\nlet adjusted = false;\n\nif (lastBot && startsWithGreeting(lastBot) && startsWithGreeting(reply)) {\n  reply = removeOpeningGreeting(reply);\n  adjusted = true;\n}\nif (businessType && asksBusinessType(reply)) {\n  reply = fallbackForwardQuestion();\n  repetitionRisk = true;\n  adjusted = true;\n}\nif (painPoint && asksPainPoint(reply) && similarity(reply, lastBot) > 0.35) {\n  reply = fallbackForwardQuestion();\n  repetitionRisk = true;\n  adjusted = true;\n}\nif (lastBot && similarity(reply, lastBot) > 0.72) {\n  reply = fallbackForwardQuestion();\n  repetitionRisk = true;\n  adjusted = true;\n}\nif (!reply) reply = 'Gracias por escribirme. Nicolás va a revisar tu mensaje y te responde en breve.';\n\nfunction compactSummary() {\n  const pieces = [];\n  const previous = String(input.previous_conversation_summary || '').trim();\n  if (previous) pieces.push(previous);\n  if (businessType && !normalize(previous).includes(normalize(businessType))) pieces.push(`El negocio es ${businessType}.`);\n  if (painPoint && !normalize(previous).includes(normalize(painPoint))) pieces.push(`Necesidad: ${painPoint}.`);\n  if (current) pieces.push(`Último mensaje del lead: ${current}`);\n  if (reply) pieces.push(`Última respuesta del bot: ${reply}`);\n  return pieces.join(' ').replace(/\\s+/g, ' ').slice(-1800);\n}\n\nreturn [{\n  json: {\n    ...input,\n    reply_text: reply,\n    repetition_risk: repetitionRisk,\n    reply_was_adjusted: adjusted,\n    updated_conversation_summary: compactSummary(),\n    messages_count: Number(input.messages_count || 0) + 1,\n  },\n}];"
+      },
+      "id": "a764d14e-c598-4a36-a01d-51080ed5615b",
+      "name": "Anti-Repetition Validate Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3760,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://api.notion.com/v1/pages/' + $json.notion_page_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.NOTION_TOKEN }}"
+            },
+            {
+              "name": "Notion-Version",
+              "value": "2022-06-28"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ (() => {\n  const rt = (value) => ({ rich_text: String(value || '').trim() ? [{ text: { content: String(value || '').slice(0, 1900) } }] : [] });\n  const select = (value, fallback) => ({ select: { name: String(value || fallback).slice(0, 100) } });\n  return JSON.stringify({\n    properties: {\n      Status: select($json.lead_status || $json.lead_stage, 'new'),\n      Intent: select($json.intent, 'unknown'),\n      \"Last Message\": rt($json.combined_text),\n      Summary: rt($json.summary || $json.updated_conversation_summary || $json.combined_text),\n      \"Business Type\": rt($json.business_type),\n      \"Pain Point\": rt($json.pain_point),\n      \"Conversation Summary\": rt($json.updated_conversation_summary || $json.previous_conversation_summary || $json.summary),\n      \"Last User Message\": rt($json.combined_text),\n      \"Last Bot Reply\": rt($json.reply_text),\n      \"Last Contact At\": { date: { start: $now.toISO() } },\n      \"Lead Stage\": select($json.lead_stage || $json.lead_status, 'new'),\n      \"Buying Intent\": select($json.buying_intent, 'medium'),\n      \"Repetition Risk\": { checkbox: $json.repetition_risk === true },\n      \"Messages Count\": { number: Number($json.messages_count || 1) }\n    }\n  });\n})() }}",
+        "options": {}
+      },
+      "id": "786e9a44-dbe3-4036-9193-83af6399c6aa",
+      "name": "Notion Update Conversation Memory",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3980,
+        540
+      ],
+      "continueOnFail": true
     }
   ],
   "connections": {
@@ -370,18 +602,7 @@
         ],
         [
           {
-            "node": "Notion Create or Update Lead",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Notion Create or Update Lead": {
-      "main": [
-        [
-          {
-            "node": "IF: Telegram Handoff Needed",
+            "node": "Notion Search Lead By Phone",
             "type": "main",
             "index": 0
           }
@@ -399,7 +620,7 @@
         ],
         [
           {
-            "node": "Gemini Response Generation",
+            "node": "Set Telegram Skipped",
             "type": "main",
             "index": 0
           }
@@ -410,7 +631,7 @@
       "main": [
         [
           {
-            "node": "Gemini Response Generation",
+            "node": "Merge Telegram Result",
             "type": "main",
             "index": 0
           }
@@ -432,7 +653,7 @@
       "main": [
         [
           {
-            "node": "Evolution API Send Message",
+            "node": "Anti-Repetition Validate Reply",
             "type": "main",
             "index": 0
           }
@@ -459,6 +680,133 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Notion Search Lead By Phone": {
+      "main": [
+        [
+          {
+            "node": "Build Lead Memory From Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Lead Memory From Notion": {
+      "main": [
+        [
+          {
+            "node": "IF: Existing Notion Lead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Existing Notion Lead?": {
+      "main": [
+        [
+          {
+            "node": "Notion Update Existing Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notion Create Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion Update Existing Lead": {
+      "main": [
+        [
+          {
+            "node": "Merge Notion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion Create Lead": {
+      "main": [
+        [
+          {
+            "node": "Merge Notion Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Notion Result": {
+      "main": [
+        [
+          {
+            "node": "IF: Telegram Handoff Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Telegram Result": {
+      "main": [
+        [
+          {
+            "node": "Build AI Response Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Telegram Skipped": {
+      "main": [
+        [
+          {
+            "node": "Build AI Response Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Response Context": {
+      "main": [
+        [
+          {
+            "node": "Gemini Response Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anti-Repetition Validate Reply": {
+      "main": [
+        [
+          {
+            "node": "Evolution API Send Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notion Update Conversation Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion Update Conversation Memory": {
+      "main": [
+        []
       ]
     }
   },
