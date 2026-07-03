@@ -45,6 +45,10 @@ evolution_store/
 postgres_data/
 redis_data/
 
+# Live n8n exports can contain local workflow IDs, credential names, calendar IDs,
+# chat IDs, and other operational metadata. Keep only sanitized templates tracked.
+n8n/workflows/Autobots - WhatsApp Buffered Inbound Template.json
+
 # Generated exports
 *.xlsx
 *.csv
@@ -55,3 +59,7 @@ docs/business/
 prompts/
 data/templates/
 
+# Personal documents that must never be tracked in a public repo
+nicolas_vargas_ai_coding_context_report.md
+agents.md
+*.pdf

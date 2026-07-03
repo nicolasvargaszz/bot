@@ -19,6 +19,9 @@ class MessageBufferSettings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
     n8n_webhook_url: str = ""
+    evolution_buffer_webhook_secret: str = ""
+    n8n_buffered_webhook_secret: str = ""
+    webhook_secret_header: str = "X-Autobots-Webhook-Secret"
     message_buffer_seconds: int = Field(default=8, ge=1)
     message_buffer_max_messages: int = Field(default=20, ge=1)
     message_buffer_max_age_seconds: int = Field(default=120, ge=30)

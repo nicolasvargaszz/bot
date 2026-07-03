@@ -65,6 +65,7 @@ PYTHONPATH=src python -m autobots.leads.pipeline
 Run the legacy dashboard:
 
 ```bash
+DASHBOARD_PASSWORD=replace-with-a-local-password \
 PYTHONPATH=src python -m autobots.dashboard.app
 ```
 
@@ -93,6 +94,8 @@ Required local variables:
 ```bash
 REDIS_URL=redis://localhost:6379/0
 N8N_WEBHOOK_URL=http://localhost:5678/webhook/whatsapp-buffer
+EVOLUTION_BUFFER_WEBHOOK_SECRET=replace-me
+N8N_BUFFERED_WEBHOOK_SECRET=replace-me-too
 MESSAGE_BUFFER_SECONDS=8
 ```
 
