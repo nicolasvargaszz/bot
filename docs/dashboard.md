@@ -116,3 +116,4 @@ Click `Save updated CSV` to write the new status back to the selected file.
 - Keep `data/processed/` for local working data.
 - The dashboard opens WhatsApp links manually; it does not automate outbound messages.
 - Use this dashboard to review and prioritize leads before contacting them.
+- If you run the legacy Flask dashboard (`python -m autobots.dashboard.app`), set `DASHBOARD_PASSWORD` first. It binds to `127.0.0.1` by default and requires Basic Auth unless `DASHBOARD_AUTH_ENABLED=false` is explicitly set.

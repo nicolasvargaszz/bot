@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
 Panel de Ventas v2 - Diseño Cálido
-Sin login, con filtros por categoría y score de compra
+Con autenticación básica, filtros por categoría y score de compra
 """
 
+import base64
+import hmac
+import os
 import sys
 import json
 import re
@@ -11,13 +14,89 @@ import sqlite3
 import unicodedata
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, render_template_string, request, jsonify
+from flask import Flask, Response, jsonify, render_template_string, request
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 app = Flask(__name__)
+
+AUTH_REALM = "Autobots Sales Dashboard"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _basic_auth_challenge(message: str = "Authentication required") -> Response:
+    return Response(
+        message,
+        401,
+        {"WWW-Authenticate": f'Basic realm="{AUTH_REALM}", charset="UTF-8"'},
+    )
+
+
+def _parse_basic_auth(header_value: str) -> tuple[str, str] | None:
+    scheme, _, encoded = header_value.partition(" ")
+    if scheme.lower() != "basic" or not encoded:
+        return None
+    try:
+        decoded = base64.b64decode(encoded, validate=True).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    username, separator, password = decoded.partition(":")
+    if not separator:
+        return None
+    return username, password
+
+
+def _valid_dashboard_credentials(header_value: str | None) -> bool:
+    expected_user = os.getenv("DASHBOARD_USERNAME", "nicolas")
+    expected_password = os.getenv("DASHBOARD_PASSWORD", "")
+    if not expected_password or not header_value:
+        return False
+
+    credentials = _parse_basic_auth(header_value)
+    if not credentials:
+        return False
+
+    username, password = credentials
+    return hmac.compare_digest(username, expected_user) and hmac.compare_digest(
+        password,
+        expected_password,
+    )
+
+
+@app.before_request
+def require_dashboard_auth():
+    """Protect local lead data and editor endpoints from accidental exposure."""
+    if not _env_bool("DASHBOARD_AUTH_ENABLED", True):
+        return None
+
+    if not os.getenv("DASHBOARD_PASSWORD"):
+        return Response(
+            "DASHBOARD_PASSWORD is required when DASHBOARD_AUTH_ENABLED is true.",
+            503,
+        )
+
+    if not _valid_dashboard_credentials(request.headers.get("Authorization")):
+        return _basic_auth_challenge()
+
+    return None
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("Cache-Control", "no-store, private")
+    response.headers.setdefault("Pragma", "no-cache")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
 
 try:
     from editor import editor_bp, init_db as init_editor_db
@@ -959,8 +1038,12 @@ DASHBOARD_HTML = '''
 
 if __name__ == '__main__':
     init_editor_db()
+    dashboard_host = os.getenv("DASHBOARD_HOST", "127.0.0.1")
+    dashboard_port = int(os.getenv("DASHBOARD_PORT", "5002"))
+    dashboard_debug = _env_bool("DASHBOARD_DEBUG", False)
     print("🚀 Panel de Ventas v2 - Diseño Cálido")
     print("=" * 40)
-    print("📍 URL: http://localhost:5002")
+    print(f"📍 URL: http://{dashboard_host}:{dashboard_port}")
+    print("🔐 Basic Auth: enabled" if _env_bool("DASHBOARD_AUTH_ENABLED", True) else "🔓 Basic Auth: disabled")
     print("=" * 40)
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    app.run(host=dashboard_host, port=dashboard_port, debug=dashboard_debug)
