@@ -13,6 +13,7 @@ from autobots.services.message_buffer.config import MessageBufferSettings
 from autobots.services.message_buffer.models import IncomingMessage, MessageType
 from autobots.services.message_buffer.transcription import (
     AudioTranscriptionService,
+    AzureWhisperProvider,
     DisabledTranscriptionProvider,
     LocalWhisperProvider,
     TranscriptionError,
@@ -58,9 +59,43 @@ def test_provider_selection():
         WhisperApiProvider,
     )
     assert isinstance(
+        build_transcription_provider(MessageBufferSettings(transcription_provider="azure_whisper")),
+        AzureWhisperProvider,
+    )
+    assert isinstance(
         build_transcription_provider(MessageBufferSettings(transcription_provider="local_whisper")),
         LocalWhisperProvider,
     )
+
+
+def test_azure_whisper_builds_deployment_url_and_api_key_header():
+    provider = AzureWhisperProvider(
+        MessageBufferSettings(
+            transcription_provider="azure_whisper",
+            azure_openai_endpoint="https://my-resource.openai.azure.com/",
+            azure_openai_key="azure-key",
+            azure_whisper_deployment="whisper",
+            azure_openai_api_version="2024-10-21",
+        )
+    )
+
+    url, headers, data = provider._build_request()
+
+    assert url == (
+        "https://my-resource.openai.azure.com/openai/deployments/whisper"
+        "/audio/transcriptions?api-version=2024-10-21"
+    )
+    assert headers == {"api-key": "azure-key"}
+    assert data == {}
+
+
+def test_azure_whisper_requires_configuration():
+    provider = AzureWhisperProvider(
+        MessageBufferSettings(transcription_provider="azure_whisper")
+    )
+
+    with pytest.raises(TranscriptionError):
+        provider._build_request()
 
 
 @pytest.mark.asyncio
