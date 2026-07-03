@@ -27,21 +27,38 @@
 
     <main>
       <section id="inicio" class="hero">
-        <div class="hero-overlay"></div>
-        <div class="hero-content">
-          <p class="eyebrow">Automatización para negocios en Paraguay</p>
-          <h1>Automatizaciones de WhatsApp para negocios</h1>
-          <p class="hero-copy">
-            Respondé más rápido, ordená tus consultas y no pierdas clientes por WhatsApp.
-          </p>
-          <p class="hero-support">
-            Creamos sistemas simples para responder preguntas repetitivas, guardar interesados y avisarte cuando un cliente está listo para comprar, agendar o pedir más información.
-          </p>
-          <div class="hero-actions">
-            <a class="button button-primary whatsapp-link" href="#" data-message="Hola, quiero automatizar el WhatsApp de mi negocio. Me pasás más info?">Quiero automatizar mi WhatsApp</a>
-            <a class="button button-secondary" href="#demo">Ver demo</a>
+        <div class="container hero-grid">
+          <div class="hero-content">
+            <p class="eyebrow">Automatización para negocios en Paraguay</p>
+            <h1>Automatizaciones de WhatsApp para negocios</h1>
+            <p class="hero-copy">
+              Respondé más rápido, ordená tus consultas y no pierdas clientes por WhatsApp.
+            </p>
+            <p class="hero-support">
+              Creamos sistemas simples para responder preguntas repetitivas, guardar interesados y avisarte cuando un cliente está listo para comprar, agendar o pedir más información.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary whatsapp-link" href="#" data-message="Hola, quiero automatizar el WhatsApp de mi negocio. Me pasás más info?">Quiero automatizar mi WhatsApp</a>
+              <a class="button button-secondary" href="#demo">Ver demo</a>
+            </div>
+            <p class="hero-note">Ideal para inmobiliarias, tiendas, clínicas, salones y servicios locales.</p>
           </div>
-          <p class="hero-note">Ideal para inmobiliarias, tiendas, clínicas, salones y servicios locales.</p>
+          <div class="phone" aria-label="Ejemplo de conversación atendida por el sistema">
+            <div class="phone-top">
+              <span class="phone-avatar">F</span>
+              <div>
+                <strong>Ferretería San Roque</strong>
+                <span>en línea</span>
+              </div>
+            </div>
+            <div class="phone-chat">
+              <div class="msg msg-in">Hola, ¿tienen taladros? ¿A cuánto?</div>
+              <div class="msg msg-out">¡Hola! Sí, tenemos desde Gs. 350.000. ¿Lo necesitás para uso doméstico o para obra?</div>
+              <div class="msg msg-in">Para obra. ¿Hacen envíos a Luque?</div>
+              <div class="msg msg-out">Sí, llega mañana. Te confirmo el pedido con Carlos, que ya vio tu consulta.</div>
+              <div class="chat-note">Aviso interno enviado: lead listo para seguimiento</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -179,13 +196,29 @@
             <p>Te mostramos una demo corta con un flujo parecido al de tu negocio. Vas a ver cómo responde, qué datos pide y cuándo deriva a una persona.</p>
             <a class="button button-primary whatsapp-link" href="#" data-message="Hola, quiero ver una demo de la automatización para WhatsApp.">Ver demo por WhatsApp</a>
           </div>
-          <div class="chat-preview" aria-label="Vista previa de conversación">
-            <div class="chat-header">Demo WhatsApp</div>
-            <div class="bubble bubble-client">Hola, me pasás precio?</div>
-            <div class="bubble bubble-bot">Claro. Para orientarte mejor, ¿qué tipo de negocio tenés?</div>
-            <div class="bubble bubble-client">Tengo una inmobiliaria.</div>
-            <div class="bubble bubble-bot">Perfecto. Te puedo mostrar un flujo para filtrar interesados por zona, presupuesto y tipo de propiedad.</div>
-            <div class="handoff">Aviso interno: lead listo para seguimiento</div>
+          <div class="alert-preview" aria-label="Vista previa del aviso interno que recibe tu equipo">
+            <div class="alert-head">Aviso interno · Telegram</div>
+            <div class="alert-body">
+              <p class="alert-title">Lead listo para seguimiento</p>
+              <dl>
+                <div>
+                  <dt>Contacto</dt>
+                  <dd>+595 981 ··· ···</dd>
+                </div>
+                <div>
+                  <dt>Negocio</dt>
+                  <dd>Inmobiliaria</dd>
+                </div>
+                <div>
+                  <dt>Interés</dt>
+                  <dd>Alquiler · Villa Morra · hasta Gs. 4.000.000</dd>
+                </div>
+                <div>
+                  <dt>Acción</dt>
+                  <dd>Responder con opciones disponibles en la zona</dd>
+                </div>
+              </dl>
+            </div>
           </div>
         </div>
       </section>
@@ -204,6 +237,7 @@
               <p>Para negocios que necesitan una página profesional con botón a WhatsApp.</p>
             </article>
             <article class="featured-plan">
+              <span class="plan-tag">Recomendado para empezar</span>
               <h3>WhatsApp Automation Pilot</h3>
               <p class="price">Desde Gs. 1.700.000</p>
               <p>Para probar una automatización simple con preguntas frecuentes y avisos internos.</p>
