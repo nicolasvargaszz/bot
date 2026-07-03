@@ -1,0 +1,78 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project overview
+
+Autobots is an automation-agency codebase for WhatsApp lead filtering, CRM organization, and human handoff for local businesses in Paraguay. It grew out of two pieces of legacy code — a Google Maps lead-generation pipeline and a previous WhatsApp/n8n automation — and is being turned into a repeatable "Automation as a Service" system.
+
+The end-to-end flow: lead sources → lead processing/scoring → manual outreach links → WhatsApp conversations → **message buffer service** → **n8n workflow** (AI response + CRM update + Telegram handoff) → human follow-up.
+
+## Development boundaries (important)
+
+This repo prepares, routes, buffers, and documents automation flows. It **does not send outbound WhatsApp campaigns from Python**. Treat these as needing explicit production review before doing them: sending WhatsApp replies, importing n8n workflows into a live account, wiring real Telegram/Notion/AI/Evolution credentials, or processing real customer data. Safe in-repo actions: generating manual WhatsApp links, inspecting leads locally, buffering inbound messages, forwarding combined messages to n8n, and formatting handoff alerts.
+
+## Commands
+
+All Python code lives under `src/` and is imported as the `autobots.*` package, so `PYTHONPATH=src` is required for every invocation.
+
+```bash
+# Setup
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m playwright install chromium   # only needed for scrapers
+cp .env.example .env
+
+# Tests (pytest with pytest-asyncio)
+PYTHONPATH=src pytest
+PYTHONPATH=src pytest tests/test_message_buffer_combine.py            # single file
+PYTHONPATH=src pytest tests/test_message_buffer_combine.py::test_name  # single test
+
+# Run the message buffer service (FastAPI)
+PYTHONPATH=src uvicorn autobots.services.message_buffer.app:app --host 0.0.0.0 --port 8081 --reload
+
+# Legacy lead pipeline
+PYTHONPATH=src python -m autobots.leads.pipeline
+
+# Legacy Flask dashboard
+DASHBOARD_PASSWORD=some-local-password PYTHONPATH=src python -m autobots.dashboard.app
+
+# Generate manual WhatsApp links from a JSON lead export
+PYTHONPATH=src python -m autobots.outreach.message_generator
+
+# Full local stack (postgres, redis, evolution-api, n8n, message-buffer)
+docker compose up
+```
+
+Note: `agents.md` in the repo root is an unrelated personal document (a career/business plan), not engineering guidance.
+
+## Architecture
+
+### Message buffer service — `src/autobots/services/message_buffer/`
+A standalone FastAPI service, the core of the live system. It receives Evolution API webhook events at `POST /webhook/evolution`, buffers short WhatsApp message fragments per sender in Redis, waits for a quiet window, then combines and forwards a single payload to n8n. It never sends WhatsApp replies itself.
+
+Key pieces:
+- `app.py` — FastAPI app; the `lifespan` wires a `RedisMessageStore`, `N8NClient`, `AudioTranscriptionService`, and a background `DebounceWorker` task.
+- `debouncer.py` — `DebounceWorker` polls Redis for sessions whose debounce window (`MESSAGE_BUFFER_SECONDS`) has expired and flushes them.
+- `redis_store.py` — per-sender message storage + dedup.
+- `models.py` — `EvolutionWebhookParser` and `combine_buffered_messages` (message-combining logic).
+- `n8n_client.py` / `retry.py` — outbound forwarding with retry.
+- `transcription.py` / `audio.py` — optional voice-note transcription (off by default, `TRANSCRIPTION_PROVIDER=disabled`).
+- Webhook auth uses HMAC secrets (`EVOLUTION_BUFFER_WEBHOOK_SECRET` inbound, `N8N_BUFFERED_WEBHOOK_SECRET` outbound).
+
+### Legacy lead pipeline — `src/autobots/leads/`, `scrapers/`, `outreach/`
+- `scrapers/` — Google Maps (`google_maps.py`) and Properstar (`properstar_agents.py`) lead discovery (Playwright).
+- `leads/pipeline.py` — orchestrates cleaning (`cleaner.py`) → scoring (`scorer.py`, a weighted 0–100 purchase score) → SQLite output under `data/processed/`. Reads legacy data from `data/legacy/`.
+- `outreach/` — `whatsapp_links.py` builds `wa.me` links; `message_generator.py` produces outreach messages.
+- `handoff/telegram_templates.py` — formats human-handoff alert messages.
+- `dashboard/` — preserved local Flask dashboard for lead review (auth via `DASHBOARD_*` env vars).
+
+### Config
+- `src/autobots/config/settings.py` — general project settings.
+- `src/autobots/services/message_buffer/config.py` — `MessageBufferSettings` (pydantic-settings), loaded via `get_settings()`. All runtime config comes from environment variables; see `.env.example` for the full list.
+
+### n8n workflows — `n8n/workflows/`
+Exported n8n workflow JSON (e.g. `whatsapp_buffered_inbound_template.json`) that consume the buffer service's forwarded payloads. These are reference/importable; do not import into a live account without review.
+
+## Docs
+Architecture and deployment notes live in `docs/` — notably `docs/architecture/message-buffer-and-ai-flow.md`, `docs/architecture/conversation_memory.md`, and `docs/deployment/docker-local.md`.
