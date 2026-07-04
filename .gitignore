@@ -63,3 +63,6 @@ data/templates/
 nicolas_vargas_ai_coding_context_report.md
 agents.md
 *.pdf
+
+# Personal reading room (reports, checklists, lead data)
+docs/handbook/
