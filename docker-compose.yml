@@ -76,6 +76,8 @@ services:
       # CORREGIDO: La URL de Redis ahora apunta al nombre correcto del contenedor.
       - REDIS_URL=redis://evolution_redis:6379/0
       - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://n8n:5678/webhook/whatsapp-buffer}
+      - EVOLUTION_BUFFER_WEBHOOK_SECRET=${EVOLUTION_BUFFER_WEBHOOK_SECRET:?Set EVOLUTION_BUFFER_WEBHOOK_SECRET in .env}
+      - N8N_BUFFERED_WEBHOOK_SECRET=${N8N_BUFFERED_WEBHOOK_SECRET:?Set N8N_BUFFERED_WEBHOOK_SECRET in .env}
       - MESSAGE_BUFFER_SECONDS=${MESSAGE_BUFFER_SECONDS:-8}
       - MESSAGE_BUFFER_MAX_MESSAGES=${MESSAGE_BUFFER_MAX_MESSAGES:-20}
       - MESSAGE_BUFFER_MAX_AGE_SECONDS=${MESSAGE_BUFFER_MAX_AGE_SECONDS:-120}
@@ -85,6 +87,10 @@ services:
       - TRANSCRIPTION_PROVIDER=${TRANSCRIPTION_PROVIDER:-disabled}
       - WHISPER_API_KEY=${WHISPER_API_KEY:-}
       - WHISPER_API_URL=${WHISPER_API_URL:-https://api.openai.com/v1/audio/transcriptions}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-}
+      - AZURE_WHISPER_DEPLOYMENT=${AZURE_WHISPER_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-10-21}
       - AUDIO_DOWNLOAD_TIMEOUT_SECONDS=${AUDIO_DOWNLOAD_TIMEOUT_SECONDS:-15}
       - MAX_AUDIO_SIZE_MB=${MAX_AUDIO_SIZE_MB:-10}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -105,7 +111,9 @@ services:
         condition: service_started
 
   n8n:
-    image: n8nio/n8n:latest
+    # Pinned so a droplet rebuild months later gets the same n8n, not
+    # whatever :latest means that day.
+    image: n8nio/n8n:2.28.6
     container_name: n8n
     restart: always
     ports:
@@ -120,9 +128,32 @@ services:
       - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
       - WEBHOOK_URL=${N8N_PUBLIC_URL:-http://localhost:5678/}
       - GENERIC_TIMEZONE=${TIMEZONE:-America/Asuncion}
-      - N8N_BASIC_AUTH_ACTIVE=true
-      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:?Set N8N_BASIC_AUTH_PASSWORD in .env}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      - N8N_BUFFERED_WEBHOOK_SECRET=${N8N_BUFFERED_WEBHOOK_SECRET:?Set N8N_BUFFERED_WEBHOOK_SECRET in .env}
+      # Variables read by the workflow templates through $env.
+      # AI provider: "azure" (Azure OpenAI) or "gemini" (Gemini free tier).
+      - AI_PROVIDER=${AI_PROVIDER:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-2024-10-21}
+      - AZURE_OPENAI_CLASSIFICATION_DEPLOYMENT=${AZURE_OPENAI_CLASSIFICATION_DEPLOYMENT:-}
+      - AZURE_OPENAI_RESPONSE_DEPLOYMENT=${AZURE_OPENAI_RESPONSE_DEPLOYMENT:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_CLASSIFICATION_MODEL=${GEMINI_CLASSIFICATION_MODEL:-gemini-2.5-flash}
+      - GEMINI_RESPONSE_MODEL=${GEMINI_RESPONSE_MODEL:-gemini-2.5-pro}
+      - NOTION_TOKEN=${NOTION_TOKEN:-}
+      - NOTION_DATABASE_ID=${NOTION_DATABASE_ID:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:?Set EVOLUTION_API_KEY in .env}
+      # Inside the compose network, n8n reaches Evolution by service name,
+      # not by the host-facing EVOLUTION_SERVER_URL.
+      - EVOLUTION_SERVER_URL=${EVOLUTION_INTERNAL_SERVER_URL:-http://evolution-api:8080}
+      - EVOLUTION_INSTANCE=${EVOLUTION_INSTANCE:-autobots-main}
+      # Access control: n8n's own owner account (created on first login).
+      # The N8N_BASIC_AUTH_* variables are deprecated no-ops since n8n 1.0,
+      # so they were removed instead of pretending to protect anything.
+      # The editor port is bound to 127.0.0.1; reach it through an SSH tunnel.
       - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
 volumes:
   postgres_data:

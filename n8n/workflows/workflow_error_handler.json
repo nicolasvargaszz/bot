@@ -1,5 +1,5 @@
 {
-  "name": "Error Handler",
+  "name": "Autobots - Error Handler",
   "nodes": [
     {
       "parameters": {},
@@ -14,10 +14,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// =============================================================\n// NODO CODE: FORMATEAR ERROR PARA TELEGRAM\n// Este workflow se ejecuta automáticamente cuando falla cualquier\n// nodo del workflow principal \"Agente WhatsApp PoC\"\n// =============================================================\n\nconst execution = $input.first().json.execution || {};\nconst workflow = $input.first().json.workflow || {};\n\n// Obtener información del error\nconst errorMessage = execution.error?.message || 'Error desconocido';\nconst errorNode = execution.error?.node?.name || 'Nodo desconocido';\nconst workflowName = workflow.name || 'Workflow desconocido';\nconst executionId = execution.id || 'N/A';\n\n// Intentar extraer el número de celular del contexto de ejecución\nlet celular = 'No disponible';\ntry {\n  const data = execution.data?.resultData?.runData;\n  if (data) {\n    // Buscar en Set Fields\n    if (data['Set Fields']) {\n      celular = data['Set Fields'][0]?.data?.main?.[0]?.[0]?.json?.celular || celular;\n    }\n    // Buscar en Webhook Trigger como fallback\n    if (celular === 'No disponible' && data['Webhook Trigger']) {\n      const webhookData = data['Webhook Trigger'][0]?.data?.main?.[0]?.[0]?.json;\n      celular = webhookData?.body?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '') || celular;\n    }\n  }\n} catch (e) {\n  celular = 'Error extrayendo número';\n}\n\n// Formatear mensaje para Telegram\nconst mensaje = `🚨 *ERROR EN WORKFLOW*\n\n*Workflow:* ${workflowName}\n*Nodo que falló:* ${errorNode}\n*Error:* ${errorMessage.substring(0, 500)}\n*Contacto:* ${celular}\n*Execution ID:* ${executionId}\n*Timestamp:* ${new Date().toISOString()}\n\n_Revisar en n8n → Executions para más detalles_`;\n\nreturn [{\n  json: {\n    mensaje: mensaje\n  }\n}];"
+        "jsCode": "// Format a failed execution into one Telegram alert.\n// This workflow runs automatically when any workflow that selects it as\n// its error workflow fails (Settings -> Error Workflow).\n\nconst payload = $input.first().json || {};\nconst execution = payload.execution || {};\nconst workflow = payload.workflow || {};\n\nconst errorMessage = execution.error?.message || 'Unknown error';\nconst errorNode = execution.error?.node?.name || 'Unknown node';\nconst workflowName = workflow.name || 'Unknown workflow';\nconst executionId = execution.id || 'N/A';\n\n// Best-effort: recover the lead's phone from the failed execution so the\n// operator can follow up manually even when the automation broke.\nlet phone = 'No disponible';\ntry {\n  const runData = execution.data?.resultData?.runData || {};\n  const normalized = runData['Set / Normalize Input']?.[0]?.data?.main?.[0]?.[0]?.json;\n  if (normalized?.phone) {\n    phone = normalized.phone;\n  } else {\n    const webhook = runData['Webhook Trigger']?.[0]?.data?.main?.[0]?.[0]?.json;\n    phone = webhook?.body?.phone\n      || webhook?.body?.data?.key?.remoteJid?.replace('@s.whatsapp.net', '')\n      || phone;\n  }\n} catch (error) {\n  phone = 'Error extrayendo número';\n}\n\nconst mensaje = `🚨 *ERROR EN WORKFLOW*\\n\\n*Workflow:* ${workflowName}\\n*Nodo que falló:* ${errorNode}\\n*Error:* ${String(errorMessage).substring(0, 500)}\\n*Contacto:* ${phone}\\n*Execution ID:* ${executionId}\\n*Timestamp:* ${new Date().toISOString()}\\n\\n_Revisar en n8n → Executions para más detalles_`;\n\nreturn [{\n  json: {\n    mensaje,\n  },\n}];"
       },
       "id": "format-error",
-      "name": "Formatear Error",
+      "name": "Format Error Alert",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -27,14 +27,14 @@
     },
     {
       "parameters": {
-        "chatId": "TU_CHAT_ID_TELEGRAM",
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
         "text": "={{ $json.mensaje }}",
         "additionalFields": {
           "parse_mode": "Markdown"
         }
       },
       "id": "telegram-error",
-      "name": "Telegram Error",
+      "name": "Telegram Error Alert",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
@@ -48,18 +48,18 @@
       "main": [
         [
           {
-            "node": "Formatear Error",
+            "node": "Format Error Alert",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Formatear Error": {
+    "Format Error Alert": {
       "main": [
         [
           {
-            "node": "Telegram Error",
+            "node": "Telegram Error Alert",
             "type": "main",
             "index": 0
           }
@@ -67,14 +67,13 @@
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1"
   },
   "versionId": "1",
   "meta": {
-    "templateCredsSetupCompleted": false,
-    "instanceId": "campana-error-handler"
+    "templateCredsSetupCompleted": false
   },
   "tags": []
 }

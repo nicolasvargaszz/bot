@@ -85,7 +85,12 @@ Expected response shape:
 For local development without Docker:
 
 ```bash
-PYTHONPATH=src REDIS_URL=redis://localhost:6379/0 N8N_WEBHOOK_URL=http://localhost:5678/webhook/whatsapp-buffer .venv/bin/uvicorn autobots.services.message_buffer.app:app --host 0.0.0.0 --port 8081 --reload
+PYTHONPATH=src \
+REDIS_URL=redis://localhost:6379/0 \
+N8N_WEBHOOK_URL=http://localhost:5678/webhook/whatsapp-buffer \
+EVOLUTION_BUFFER_WEBHOOK_SECRET=replace-me \
+N8N_BUFFERED_WEBHOOK_SECRET=replace-me-too \
+.venv/bin/uvicorn autobots.services.message_buffer.app:app --host 127.0.0.1 --port 8081 --reload
 ```
 
 The compose file does not mount source code into the container. That keeps the default Docker stack closer to production. Use the local command above when you want live reload while editing code.
@@ -98,6 +103,7 @@ Docker service URL:
 
 ```env
 EVOLUTION_WEBHOOK_URL=http://message-buffer:8081/webhook/evolution
+EVOLUTION_BUFFER_WEBHOOK_SECRET=<long-random-secret>
 ```
 
 Public/local browser URL:
@@ -112,6 +118,14 @@ In `docker-compose.yml`, Evolution uses:
 WEBHOOK_GLOBAL_URL=${EVOLUTION_WEBHOOK_URL:-http://message-buffer:8081/webhook/evolution}
 WEBHOOK_EVENTS_MESSAGES_UPSERT=true
 ```
+
+The buffer service now requires this HTTP header on inbound Evolution webhooks:
+
+```text
+X-Autobots-Webhook-Secret: <EVOLUTION_BUFFER_WEBHOOK_SECRET>
+```
+
+Prefer configuring this through the Evolution instance webhook settings/API. If you use only the global URL environment variable, confirm that your Evolution deployment can also attach custom webhook headers before enabling the protected buffer endpoint.
 
 After changing webhook variables, restart Evolution API:
 
@@ -134,7 +148,10 @@ The buffer service sends combined messages to:
 
 ```env
 N8N_WEBHOOK_URL=http://n8n:5678/webhook/whatsapp-buffer
+N8N_BUFFERED_WEBHOOK_SECRET=<long-random-secret>
 ```
+
+The buffer service sends `X-Autobots-Webhook-Secret` to n8n, and the workflow rejects the request if it does not match `N8N_BUFFERED_WEBHOOK_SECRET`.
 
 Create an n8n workflow with a webhook path:
 

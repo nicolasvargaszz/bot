@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -q
+        env:
+          PYTHONPATH: src
+
+      - name: Validate n8n workflow templates
+        run: |
+          python - <<'EOF'
+          import json, pathlib, sys
+          failures = 0
+          for path in pathlib.Path("n8n/workflows").rglob("*.json"):
+              wf = json.load(open(path))
+              names = {n["name"] for n in wf["nodes"]}
+              for src, outputs in wf.get("connections", {}).items():
+                  endpoints = [src] + [
+                      link["node"]
+                      for branch in outputs.get("main", [])
+                      for link in (branch or [])
+                  ]
+                  for endpoint in endpoints:
+                      if endpoint not in names:
+                          print(f"{path}: connection references missing node {endpoint!r}")
+                          failures += 1
+              print(f"ok: {path} ({len(wf['nodes'])} nodes)")
+          sys.exit(1 if failures else 0)
+          EOF

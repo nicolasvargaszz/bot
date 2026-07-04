@@ -54,7 +54,8 @@ class WhisperApiProvider(TranscriptionProvider):
     def __init__(self, settings: MessageBufferSettings):
         self.settings = settings
 
-    async def transcribe(self, audio_path: Path, audio_metadata: dict[str, Any]) -> str:
+    def _build_request(self) -> tuple[str, dict[str, str], dict[str, str]]:
+        """Return (url, headers, form data) for the transcription request."""
         if not self.settings.whisper_api_key:
             raise TranscriptionError("WHISPER_API_KEY is not configured")
         if not self.settings.whisper_api_url:
@@ -66,6 +67,10 @@ class WhisperApiProvider(TranscriptionProvider):
         data = {
             "model": "whisper-1",
         }
+        return self.settings.whisper_api_url, headers, data
+
+    async def transcribe(self, audio_path: Path, audio_metadata: dict[str, Any]) -> str:
+        url, headers, data = self._build_request()
         mime_type = audio_metadata.get("mime_type") or "application/octet-stream"
 
         try:
@@ -75,7 +80,7 @@ class WhisperApiProvider(TranscriptionProvider):
                 }
                 async with httpx.AsyncClient(timeout=self.settings.audio_download_timeout_seconds) as client:
                     response = await client.post(
-                        self.settings.whisper_api_url,
+                        url,
                         headers=headers,
                         data=data,
                         files=files,
@@ -91,12 +96,39 @@ class WhisperApiProvider(TranscriptionProvider):
         return str(text)
 
 
+class AzureWhisperProvider(WhisperApiProvider):
+    """Whisper deployment on Azure OpenAI (GitHub Student Pack credits).
+
+    Same multipart request as the OpenAI endpoint, but the URL is built from
+    the resource endpoint plus deployment name, auth uses the ``api-key``
+    header, and the model is implied by the deployment.
+    """
+
+    def _build_request(self) -> tuple[str, dict[str, str], dict[str, str]]:
+        endpoint = self.settings.azure_openai_endpoint.rstrip("/")
+        if not endpoint:
+            raise TranscriptionError("AZURE_OPENAI_ENDPOINT is not configured")
+        if not self.settings.azure_openai_key:
+            raise TranscriptionError("AZURE_OPENAI_KEY is not configured")
+        if not self.settings.azure_whisper_deployment:
+            raise TranscriptionError("AZURE_WHISPER_DEPLOYMENT is not configured")
+
+        url = (
+            f"{endpoint}/openai/deployments/{self.settings.azure_whisper_deployment}"
+            f"/audio/transcriptions?api-version={self.settings.azure_openai_api_version}"
+        )
+        headers = {"api-key": self.settings.azure_openai_key}
+        return url, headers, {}
+
+
 def build_transcription_provider(settings: MessageBufferSettings) -> TranscriptionProvider:
     """Build the configured transcription provider."""
     if settings.transcription_provider == "disabled":
         return DisabledTranscriptionProvider()
     if settings.transcription_provider == "whisper_api":
         return WhisperApiProvider(settings)
+    if settings.transcription_provider == "azure_whisper":
+        return AzureWhisperProvider(settings)
     if settings.transcription_provider == "local_whisper":
         return LocalWhisperProvider()
     return DisabledTranscriptionProvider()

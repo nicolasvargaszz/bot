@@ -28,10 +28,17 @@ class N8NClient:
         """POST a combined message payload to n8n."""
         if not self.settings.n8n_webhook_url:
             raise N8NDeliveryError("N8N_WEBHOOK_URL is not configured")
+        if not self.settings.n8n_buffered_webhook_secret:
+            raise N8NDeliveryError("N8N_BUFFERED_WEBHOOK_SECRET is not configured")
+
+        headers = {
+            self.settings.webhook_secret_header: self.settings.n8n_buffered_webhook_secret,
+        }
 
         async with httpx.AsyncClient(timeout=self.settings.n8n_request_timeout_seconds) as client:
             response = await client.post(
                 self.settings.n8n_webhook_url,
+                headers=headers,
                 json=payload.model_dump(mode="json"),
             )
 

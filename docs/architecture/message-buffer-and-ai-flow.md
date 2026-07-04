@@ -586,7 +586,7 @@ Docker/security:
 - Do not expose Redis publicly.
 - Do not expose Postgres publicly.
 - Run n8n with authentication.
-- Use strong `N8N_BASIC_AUTH_PASSWORD`.
+- Protect the n8n editor with its owner account, keep the port bound to `127.0.0.1`, and reach it through an SSH tunnel.
 - Keep Evolution API manager protected.
 
 Public repository hygiene:
@@ -602,7 +602,7 @@ Message buffer service:
 ```env
 BUFFER_SERVICE_HOST=0.0.0.0
 BUFFER_SERVICE_PORT=8081
-BUFFER_SHARED_SECRET=
+EVOLUTION_BUFFER_WEBHOOK_SECRET=
 BUFFER_DEBOUNCE_SECONDS=6
 BUFFER_AUDIO_DEBOUNCE_SECONDS=10
 BUFFER_MAX_MESSAGES_PER_SESSION=30

@@ -1,6 +1,6 @@
 # WhatsApp Buffered Inbound n8n Workflow
 
-This document explains how to build the new n8n workflow that receives one combined message from the FastAPI message buffer service and decides how to respond.
+This document explains how to build the n8n workflow that receives one combined message from the FastAPI message buffer service, retrieves Notion conversation memory, and decides how to respond.
 
 Template file:
 
@@ -15,19 +15,32 @@ The JSON export is best-effort because n8n node internals can change between ver
 ```mermaid
 flowchart TD
     A[Webhook Trigger] --> B[Set / Normalize Input]
-    B --> C[Gemini Intent Classification]
+    B --> B2[Build Classification Request]
+    B2 --> C[AI Intent Classification]
     C --> D[Parse Classification]
-    D --> E{Intent / Lead State}
-    E -- spam or not interested --> F[Return or mark low priority]
-    E -- needs info --> G[Gemini Response Generation]
-    E -- interested / hot --> H[Notion Create or Update Lead]
-    H --> I{Handoff needed?}
-    I -- yes --> J[Telegram Handoff]
-    I -- no --> G
-    J --> G
-    G --> K[Evolution API Send Message]
-    K --> L[Return Data]
-    A -. errors .-> M[Error Handler]
+    D --> E{Spam or not interested?}
+    E -- yes --> F[Return no action]
+    E -- no --> G[Search Notion by Phone]
+    G --> H[Build Lead Memory]
+    H --> I{Existing lead?}
+    I -- yes --> J[Update Existing Lead]
+    I -- no --> K[Create Lead]
+    J --> L[Merge Notion Result]
+    K --> L
+    L --> M{Handoff needed?}
+    M -- yes --> N[Telegram Handoff]
+    M -- no --> O[Set Telegram Skipped]
+    N --> P[Merge Telegram Result]
+    O --> Q[Build AI Response Context]
+    P --> Q
+    Q --> Q2[Build Reply Request]
+    Q2 --> R[AI Response Generation]
+    R --> S[Parse Generated Response]
+    S --> T[Anti-Repetition Validate Reply]
+    T --> U[Evolution API Send Message]
+    T --> V[Update Notion Conversation Memory]
+    U --> W[Return Data]
+    A -. errors .-> X[Error Handler]
 ```
 
 ## Purpose
@@ -43,9 +56,12 @@ The buffer service already handles:
 n8n should handle:
 
 - Intent classification.
-- Lead creation/update in Notion.
+- Lead search, creation, and update in Notion.
+- Conversation memory retrieval before response generation.
 - Telegram handoff for hot leads.
 - Response generation.
+- Anti-repetition validation before sending.
+- Conversation memory update after the AI reply.
 - WhatsApp response through Evolution API.
 
 ## Expected Input
@@ -78,23 +94,57 @@ The current Python service may also include fields such as `buffer_id`, `message
 Configure these in n8n or Docker:
 
 ```env
+# AI provider: "azure" (Azure OpenAI) or "gemini" (Gemini API free tier).
+# Empty prefers Azure automatically when the Azure variables are set.
+AI_PROVIDER=
+AZURE_OPENAI_ENDPOINT=
+AZURE_OPENAI_KEY=
+AZURE_OPENAI_DEPLOYMENT=
+AZURE_OPENAI_API_VERSION=2024-10-21
+AZURE_OPENAI_CLASSIFICATION_DEPLOYMENT=
+AZURE_OPENAI_RESPONSE_DEPLOYMENT=
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-2.5-flash
+GEMINI_CLASSIFICATION_MODEL=gemini-2.5-flash
+GEMINI_RESPONSE_MODEL=gemini-2.5-pro
 NOTION_TOKEN=
 NOTION_DATABASE_ID=
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+GOOGLE_CALENDAR_ID=primary
 EVOLUTION_API_KEY=
 EVOLUTION_SERVER_URL=http://evolution-api:8080
+N8N_BUFFERED_WEBHOOK_SECRET=
 ```
 
 Do not hardcode these values in workflow JSON.
+
+## AI Provider Selection
+
+Both AI calls (classification and reply generation) are built by dedicated
+Code nodes (`Build Classification Request`, `Build Reply Request`) that emit a
+provider-specific `ai_request` object with `url`, `headers`, and `body`. The
+HTTP nodes that follow are provider-agnostic and just execute that request.
+
+- `AI_PROVIDER=azure` uses Azure OpenAI chat completions
+  (`{endpoint}/openai/deployments/{deployment}/chat/completions`), with the
+  key in the `api-key` header. Good fit for the GitHub Student Pack Azure
+  credits.
+- `AI_PROVIDER=gemini` uses `generateContent` on the Gemini API free tier,
+  with the key in the `x-goog-api-key` header (never in the URL, so it cannot
+  leak into execution logs).
+- If `AI_PROVIDER` is empty, Azure is preferred when `AZURE_OPENAI_ENDPOINT`
+  and `AZURE_OPENAI_KEY` are both set; otherwise Gemini is used.
+
+The parse nodes accept both response shapes (`candidates[0].content.parts` for
+Gemini, `choices[0].message.content` for Azure), so switching provider is a
+`.env` change plus a container restart — no workflow edits.
 
 ## Required Credentials
 
 Use n8n credentials where possible:
 
-- Google Gemini API credential, or HTTP Request with `GEMINI_API_KEY` env var.
+- AI provider key through `AZURE_OPENAI_KEY` or `GEMINI_API_KEY` env vars.
 - Notion API token.
 - Telegram Bot credential.
 - Evolution API key passed as `apikey` header.
@@ -116,6 +166,7 @@ Settings:
 - Method: `POST`
 - Path: `whatsapp-buffer`
 - Response mode: response node
+- The first code node rejects requests unless the `X-Autobots-Webhook-Secret` header matches `N8N_BUFFERED_WEBHOOK_SECRET`.
 
 The buffer service should point `N8N_WEBHOOK_URL` to:
 
@@ -141,22 +192,28 @@ Recommended logic:
 
 This creates a stable object for the rest of the workflow.
 
-### 3. Gemini Intent Classification
+### 3. Build Classification Request + AI Intent Classification
 
-Node name:
+Node names:
 
 ```text
-Gemini Intent Classification
+Build Classification Request
+AI Intent Classification
 ```
 
 Goal:
 
 Classify the message before deciding what the workflow should do.
 
-Use Gemini 2.5 Flash by default:
+`Build Classification Request` is a Code node that holds the classification
+prompt and emits the provider-specific `ai_request` (see "AI Provider
+Selection" above). `AI Intent Classification` is a generic HTTP Request node
+that executes it. Use a fast/cheap model for this call: `gpt-4o-mini` on
+Azure, or Gemini 2.5 Flash:
 
 ```env
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_CLASSIFICATION_MODEL=gemini-2.5-flash
+AZURE_OPENAI_CLASSIFICATION_DEPLOYMENT=gpt-4o-mini
 ```
 
 Expected classification JSON:
@@ -192,15 +249,15 @@ Node name:
 Parse Classification
 ```
 
-Use a Code node to parse Gemini JSON defensively.
+Use a Code node to parse the model's JSON defensively (both Gemini and Azure OpenAI response shapes are supported).
 
-Fallback if Gemini returns invalid JSON:
+Fallback if the model returns invalid JSON:
 
 - `intent=unknown`
 - `should_reply=true`
 - `should_update_crm=true`
 - `should_handoff=true`
-- `handoff_reason=Gemini classification JSON parse failed`
+- `handoff_reason=AI classification JSON parse failed`
 
 ### 5. IF: Interested / Not Interested / Needs More Info / Spam
 
@@ -219,34 +276,45 @@ Recommended behavior:
 
 The template includes a simplified IF branch for spam/not interested. You can expand this later into a Switch node with one branch per intent.
 
-### 6. Notion Create Or Update Lead
+### 6. Notion Memory Upsert
 
-Node name:
+Node names:
 
 ```text
-Notion Create or Update Lead
+Notion Search Lead By Phone
+Build Lead Memory From Notion
+IF: Existing Notion Lead?
+Notion Update Existing Lead
+Notion Create Lead
+Merge Notion Result
 ```
 
-Production behavior should be:
+Production behavior:
 
 1. Search Notion by `phone`.
-2. If a page exists, update it.
-3. If not, create it.
+2. If a page exists, load memory and update the lead.
+3. If a page does not exist, create it with initial memory fields.
+4. Continue the workflow with a single merged context object.
 
-Recommended fields:
+Required Notion properties:
 
 - Phone
-- Name
 - Status
 - Intent
 - Last Message
 - Summary
-- Source
-- Last Contacted At
-- Handoff Needed
-- Handoff Reason
+- Business Type
+- Pain Point
+- Conversation Summary
+- Last User Message
+- Last Bot Reply
+- Last Contact At
+- Lead Stage
+- Buying Intent
+- Repetition Risk
+- Messages Count
 
-The template uses a simple create-page HTTP node. Treat it as a placeholder until the real Notion schema is finalized.
+The workflow uses `Phone` as the unique lookup key. Avoid creating one Notion page per message.
 
 ### 7. IF: Telegram Handoff Needed
 
@@ -262,7 +330,7 @@ Trigger handoff when:
 - Contact is a hot lead.
 - Contact asks for a human.
 - The message is urgent or angry.
-- Gemini confidence is low.
+- Classification confidence is low.
 - Voice transcription failed and there is not enough context.
 
 ### 8. Telegram Handoff
@@ -284,26 +352,100 @@ Message should include:
 
 Keep it short enough for a salesperson to scan quickly.
 
-### 9. Gemini Response Generation
+### 9. Build AI Response Context
 
 Node name:
 
 ```text
-Gemini Response Generation
+Build AI Response Context
 ```
 
-Generate a concise WhatsApp reply.
+Build a dynamic context object for the model instead of rewriting the system prompt.
+
+The context includes:
+
+- current user message
+- lead phone and name
+- business type
+- pain point
+- lead status and intent
+- conversation summary
+- last user message
+- last bot reply
+- message count
+- behavior rules to avoid repeated greetings and repeated questions
+
+This is the key memory step. The response model should continue the conversation from this object.
+
+### 10. Build Reply Request + AI Response Generation
+
+Node names:
+
+```text
+Build Reply Request
+AI Response Generation
+```
+
+`Build Reply Request` holds the reply prompt and emits the provider-specific
+`ai_request`; `AI Response Generation` executes it. Use the stronger model
+here: your main Azure deployment (for example `gpt-4o`) or Gemini 2.5 Pro.
+
+Generate a concise WhatsApp reply using the stable system instruction and the dynamic context from `Build AI Response Context`.
 
 Rules:
 
 - Natural Spanish.
 - Short and clear.
 - Ask one useful next question when qualification is needed.
-- Do not mention AI.
+- Do not greet in every message.
+- Do not ask again for known business type or pain point.
+- Do not mention AI, internal tools, n8n, Redis, Docker, Evolution API, Notion, Telegram, Gemini, APIs, databases, prompts, or workflows.
 - Do not invent prices, availability, or promises.
 - If the contact is ready for human follow-up, acknowledge and say someone will contact them.
 
-### 10. Evolution API Send Message
+Use `GEMINI_RESPONSE_MODEL` for the response model so classification can stay cheap and fast.
+
+### 11. Anti-Repetition Validate Reply
+
+Node name:
+
+```text
+Anti-Repetition Validate Reply
+```
+
+Before sending the WhatsApp reply, this Code node checks whether the answer repeats previous behavior.
+
+It adjusts the reply when:
+
+- the bot greets again after the previous bot reply already greeted
+- the bot asks for business type even though `Business Type` is known
+- the bot asks the same question as `Last Bot Reply`
+- the generated reply is too similar to `Last Bot Reply`
+
+If the guard changes the reply, it sets `Repetition Risk` in Notion.
+
+### 12. Notion Update Conversation Memory
+
+Node name:
+
+```text
+Notion Update Conversation Memory
+```
+
+After response generation, update the lead page with:
+
+- `Last User Message`
+- `Last Bot Reply`
+- `Conversation Summary`
+- `Business Type`
+- `Pain Point`
+- `Last Contact At`
+- `Messages Count`
+- `Repetition Risk`
+
+This node should not block WhatsApp sending if Notion has a temporary error.
+
+### 13. Evolution API Send Message
 
 Node name:
 
@@ -333,7 +475,7 @@ Body:
 }
 ```
 
-### 11. Return Data To Buffer Service
+### 14. Return Data To Buffer Service
 
 Node name:
 
@@ -353,7 +495,7 @@ Return a JSON response to the FastAPI buffer service:
 }
 ```
 
-### 12. Error Handler
+### 15. Error Handler
 
 Node name:
 
@@ -373,8 +515,8 @@ The error alert should include:
 ## Recommended Improvements After Import
 
 - Replace the simplified IF node with a Switch node for each intent.
-- Add Notion search-before-create.
 - Add idempotency using `buffer_id` to avoid duplicate CRM updates.
 - Add a "human takeover" field that pauses AI replies.
+- Add Google Calendar nodes in the live workflow if this imported template is used as a replacement.
 - Add a separate workflow for error handling if n8n import does not like multiple triggers.
 - Add a sanitized demo workflow later for public portfolio presentation.

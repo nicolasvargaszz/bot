@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import asyncio
+import hmac
 import logging
 from collections.abc import Mapping
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from pydantic import BaseModel
 
 from autobots.services.message_buffer.config import get_settings
@@ -68,6 +69,27 @@ app = FastAPI(
 )
 
 
+def _verify_evolution_webhook_secret(request: Request) -> None:
+    expected_secret = settings.evolution_buffer_webhook_secret.strip()
+    if not expected_secret:
+        logger.error("evolution_buffer_webhook_secret_missing")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook secret is not configured",
+        )
+
+    received_secret = request.headers.get(settings.webhook_secret_header, "").strip()
+    if not hmac.compare_digest(received_secret, expected_secret):
+        logger.warning(
+            "evolution_webhook_unauthorized",
+            extra={"client_host": request.client.host if request.client else ""},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized webhook request",
+        )
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """Health check for container orchestration and local debugging."""
@@ -88,6 +110,8 @@ async def health() -> HealthResponse:
 @app.post("/webhook/evolution")
 async def evolution_webhook(request: Request) -> dict[str, Any]:
     """Receive Evolution API webhook events and append them to Redis buffers."""
+    _verify_evolution_webhook_secret(request)
+
     try:
         payload = await request.json()
     except Exception as exc:
