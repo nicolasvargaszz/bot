@@ -1,6 +1,10 @@
 # Autobots
 
+[![CI](https://github.com/nicolasvargaszz/autobots/actions/workflows/ci.yml/badge.svg)](https://github.com/nicolasvargaszz/autobots/actions/workflows/ci.yml)
+
 WhatsApp lead qualification for small businesses in Paraguay: an AI agent answers repetitive questions, qualifies the lead, saves it to a CRM, and hands the conversation to a human the moment it matters.
+
+**Agency landing page:** [nicolasvargaszz.github.io/autobots](https://nicolasvargaszz.github.io/autobots/)
 
 Built as the delivery system for a real automation service (fixed-scope packages, setup fee + monthly maintenance), not as a demo. Everything here deploys to a $12/month droplet and runs on GitHub Student Pack credits.
 
@@ -49,9 +53,10 @@ AI calls are provider-agnostic: `AI_PROVIDER=azure` uses Azure OpenAI (Student P
 
 - `src/autobots/services/message_buffer/` — the FastAPI buffer service
 - `n8n/workflows/` — sanitized n8n workflow templates (`legacy/` holds the superseded PoC)
-- `web/` — static landing page (vanilla HTML/CSS, no build step)
+- `web/` — static landing page (vanilla HTML/CSS, no build step), deployed to GitHub Pages on every push to `main`
 - `docs/architecture/` — design notes: buffer + AI flow, conversation memory, error handling, handoff
 - `docs/deployment/` — Docker local setup and the DigitalOcean production guide
+- `docs/operations/` — the client onboarding runbook (signed pilot → live in one day)
 - `src/autobots/{scrapers,leads,outreach,dashboard}/` — lead-generation tooling from the project this grew out of (Google Maps/Properstar scraping, lead scoring, manual outreach links)
 - `prompts/`, `docs/business/` — per-niche agent prompts and business assets, kept local and untracked
 
