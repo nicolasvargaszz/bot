@@ -7,10 +7,10 @@ import logging
 import time
 
 from autobots.services.message_buffer.config import MessageBufferSettings
+from autobots.services.message_buffer.metrics import MetricsRecorder
 from autobots.services.message_buffer.models import combine_buffered_messages
 from autobots.services.message_buffer.n8n_client import N8NClient
 from autobots.services.message_buffer.redis_store import RedisMessageStore
-
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +23,12 @@ class DebounceWorker:
         store: RedisMessageStore,
         n8n_client: N8NClient,
         settings: MessageBufferSettings,
+        metrics: MetricsRecorder | None = None,
     ):
         self.store = store
         self.n8n_client = n8n_client
         self.settings = settings
+        self.metrics = metrics
         self._stop_event = asyncio.Event()
 
     async def run_forever(self) -> None:
@@ -81,6 +83,9 @@ class DebounceWorker:
             payload = combine_buffered_messages(messages)
             await self.n8n_client.send(payload)
             await self.store.delete_session(session_id)
+            if self.metrics:
+                await self.metrics.record_flush(payload.instance, payload.message_count)
+                await self.metrics.record(payload.instance, "forward_ok")
             logger.info(
                 "buffer_flushed",
                 extra={
@@ -97,13 +102,15 @@ class DebounceWorker:
                 messages = await self.store.get_messages(session_id)
                 if messages:
                     payload = combine_buffered_messages(messages)
-                    failed_key = await self.store.move_to_failed(payload, str(exc))
+                    dlq_id = await self.store.push_to_dlq(payload, str(exc))
                     await self.store.delete_session(session_id)
+                    if self.metrics:
+                        await self.metrics.record(payload.instance, "forward_failed")
                     logger.warning(
-                        "buffer_moved_to_failed",
+                        "buffer_moved_to_dlq",
                         extra={
                             "session_id": session_id,
-                            "failed_key": failed_key,
+                            "dlq_id": dlq_id,
                             "error": str(exc),
                         },
                     )

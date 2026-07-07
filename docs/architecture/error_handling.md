@@ -138,54 +138,62 @@ Do not silently ignore:
 - qualified lead delivery failure
 - malformed payloads during active debugging
 
-## Failed Message Storage
+## Dead-Letter Queue (Failed Message Storage)
 
-When n8n delivery fails, keep the combined message payload.
+When n8n delivery fails, the combined payload is parked in a Redis dead-letter
+queue and redelivered automatically — it is never lost inside the buffer TTL.
 
-Current Redis key pattern:
+Redis keys:
 
 ```text
-failed:{instance}:{phone}:{timestamp}
+dlq:pending            # sorted set: member = dlq_id, score = next attempt (unix ts)
+dlq:entry:{dlq_id}     # JSON entry, TTL = DLQ_RETENTION_SECONDS (default 24h)
 ```
 
-Failed payload should include:
+Entry shape:
 
 ```json
 {
-  "error": "n8n returned HTTP 500",
-  "category": "n8n_unavailable",
-  "failed_at": "2026-05-03T00:00:00Z",
-  "retryable": true,
-  "payload": {
-    "instance": "autobots-main",
-    "phone": "595981123456",
-    "combined_text": "Hola, me interesa..."
-  }
+  "dlq_id": "abc123:1751925600",
+  "payload": { "instance": "autobots-main", "phone": "595981123456", "combined_text": "Hola, me interesa..." },
+  "first_error": "n8n returned HTTP 502",
+  "last_error": "n8n returned HTTP 502",
+  "attempts": 3,
+  "failed_at": "2026-07-07T20:00:00Z"
 }
 ```
 
-If Redis is unavailable, Redis obviously cannot store the failed message. In that case:
+The `RedeliveryWorker` (`redelivery.py`) polls `dlq:pending` every
+`DLQ_POLL_SECONDS` and retries delivery with bounded exponential backoff
+(`DLQ_BASE_DELAY_SECONDS` doubling up to `DLQ_MAX_DELAY_SECONDS`). After
+`DLQ_MAX_ATTEMPTS` failures the entry is dropped with an error log and a
+`dlq_dropped` metric — that metric appearing in `/admin/stats` or the pilot
+report means data loss and needs investigation.
+
+Operational controls (all require the `ADMIN_API_TOKEN` header):
+
+- `GET /admin/dlq` — inspect parked payloads, attempts, and next retry time.
+- `POST /admin/dlq/replay` — force every entry due immediately (e.g. right after fixing n8n).
+- `DELETE /admin/dlq/{dlq_id}` — discard one payload permanently.
+
+If Redis is unavailable, the DLQ cannot store the failure either. In that case:
 
 1. return a degraded response to the webhook caller
 2. log a structured error without credentials
-3. trigger admin alert through a non-Redis path if possible
-4. rely on Evolution API webhook retry if configured
-5. optionally add a future local file fallback under an ignored runtime directory
+3. rely on Evolution API webhook retry if configured
 
-Do not store secrets, tokens, session data, or full internal webhook URLs in failed payloads.
+Do not store secrets, tokens, session data, or full internal webhook URLs in DLQ entries.
 
 ```mermaid
 flowchart LR
     A[Combined payload] --> B{Delivery failed?}
     B -- no --> C[Delete buffer]
-    B -- yes --> D[Classify error]
-    D --> E{Can store failure?}
-    E -- yes --> F[failed:instance:phone:timestamp]
-    E -- no --> G[Structured log only]
-    F --> H{Alert required?}
-    G --> H
-    H -- yes --> I[Admin or Telegram alert]
-    H -- no --> J[No alert]
+    B -- yes --> D[Park in dlq:pending]
+    D --> E[RedeliveryWorker retry with backoff]
+    E --> F{Delivered?}
+    F -- yes --> G[Remove entry + dlq_redelivered metric]
+    F -- no, attempts left --> E
+    F -- no, budget exhausted --> H[Drop + dlq_dropped metric + error log]
 ```
 
 ## Fallback Behavior If AI Is Unavailable
@@ -265,12 +273,12 @@ Impact:
 
 - buffered messages cannot reach the automation workflow.
 
-Action:
+Action (implemented):
 
-- retry with exponential backoff
-- move payload to failed queue after retries
-- alert admin
-- do not delete buffer until payload is stored as failed
+- the flush moves the payload to the dead-letter queue and clears the buffer
+- the `RedeliveryWorker` retries with exponential backoff until n8n is back
+- after `DLQ_MAX_ATTEMPTS` the payload is dropped with an error log and metric
+- `POST /admin/dlq/replay` forces immediate redelivery once n8n is restored
 
 ### Gemini API Error
 
@@ -311,11 +319,13 @@ Action:
 
 ## Implementation Files
 
-Reliability helpers live in:
+Reliability code lives in:
 
 ```text
-src/autobots/services/message_buffer/errors.py
-src/autobots/services/message_buffer/retry.py
+src/autobots/services/message_buffer/errors.py      # error classification (pure)
+src/autobots/services/message_buffer/retry.py       # backoff math (pure)
+src/autobots/services/message_buffer/redelivery.py  # DLQ redelivery worker
+src/autobots/services/message_buffer/metrics.py     # per-instance counters
 ```
 
-These modules are intentionally small and pure. They classify errors and calculate retry decisions, but they do not send Telegram messages or perform network calls.
+`errors.py` and `retry.py` are intentionally small and pure: they classify errors and calculate retry decisions. `redelivery.py` applies them against the Redis DLQ, and `metrics.py` records the outcomes that surface in `/admin/stats` and the pilot report.

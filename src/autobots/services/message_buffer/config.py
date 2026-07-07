@@ -28,6 +28,15 @@ class MessageBufferSettings(BaseSettings):
     message_buffer_dedup_ttl_seconds: int = Field(default=86400, ge=60)
     message_buffer_poll_seconds: float = Field(default=1.0, ge=0.1)
     n8n_request_timeout_seconds: float = Field(default=10.0, ge=1)
+    admin_api_token: str = ""
+    admin_token_header: str = "X-Autobots-Admin-Token"
+    dlq_retention_seconds: int = Field(default=86400, ge=300)
+    dlq_max_attempts: int = Field(default=12, ge=1)
+    dlq_base_delay_seconds: float = Field(default=30.0, ge=1)
+    dlq_max_delay_seconds: float = Field(default=900.0, ge=1)
+    dlq_poll_seconds: float = Field(default=10.0, ge=1)
+    stats_retention_days: int = Field(default=45, ge=1)
+    stats_timezone: str = "America/Asuncion"
     transcription_provider: Literal[
         "disabled", "whisper_api", "azure_whisper", "local_whisper"
     ] = "disabled"
