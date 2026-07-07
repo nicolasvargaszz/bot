@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default="agentes_properstar.csv",
+        default="data/raw/agentes_properstar.csv",
         help="Ruta del CSV de salida.",
     )
     parser.add_argument(

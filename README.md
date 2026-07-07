@@ -51,14 +51,17 @@ AI calls are provider-agnostic: `AI_PROVIDER=azure` uses Azure OpenAI (Student P
 
 ## Repository layout
 
+Full map with the reasoning behind every directory: [docs/REPO-MAP.md](docs/REPO-MAP.md). The short version:
+
 - `src/autobots/services/message_buffer/` — the FastAPI buffer service
-- `n8n/workflows/` — sanitized n8n workflow templates (`legacy/` holds the superseded PoC)
+- `n8n/workflows/` — sanitized n8n workflow templates (`legacy/` holds the superseded PoC); raw live exports stay in the untracked `n8n/exports/`
 - `web/` — static landing page (vanilla HTML/CSS, no build step), deployed to GitHub Pages on every push to `main`
 - `docs/architecture/` — design notes: buffer + AI flow, conversation memory, error handling, handoff
 - `docs/deployment/` — Docker local setup and the DigitalOcean production guide
 - `docs/operations/` — the client onboarding runbook (signed pilot → live in one day)
+- `docs/legacy/` — preserved docs from the pre-Autobots WhatsApp automation, reference only
 - `src/autobots/{scrapers,leads,outreach,dashboard}/` — lead-generation tooling from the project this grew out of (Google Maps/Properstar scraping, lead scoring, manual outreach links)
-- `prompts/`, `docs/business/` — per-niche agent prompts and business assets, kept local and untracked
+- `prompts/`, `docs/business/`, `docs/handbook/` — per-niche agent prompts, business strategy, and personal notes, kept local and untracked
 
 ## Running it
 

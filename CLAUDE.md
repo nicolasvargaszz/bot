@@ -44,7 +44,17 @@ PYTHONPATH=src python -m autobots.outreach.message_generator
 docker compose up
 ```
 
-Note: `agents.md` in the repo root is an unrelated personal document (a career/business plan), not engineering guidance.
+## Repository layout conventions
+
+`docs/REPO-MAP.md` explains every directory and why it exists. Several directories are deliberately **gitignored** because they hold private business or personal material; they exist locally but never reach GitHub:
+
+- `docs/business/` — pricing, sales scripts, launch plans (private strategy).
+- `docs/handbook/` — Nicolás's personal Spanish reading room; `docs/handbook/personal/` holds personal documents (career plans, reports) that are not engineering guidance.
+- `prompts/` — per-niche AI agent prompts used when cloning n8n workflows for clients.
+- `data/templates/` — sales/CRM template files.
+- `n8n/exports/` — raw exports from the live n8n (contain workflow IDs/operational metadata); only sanitized templates are tracked under `n8n/workflows/`.
+
+Do not track these paths, and do not move private material out of them into tracked locations.
 
 ## Architecture
 
@@ -72,7 +82,7 @@ Key pieces:
 - `src/autobots/services/message_buffer/config.py` — `MessageBufferSettings` (pydantic-settings), loaded via `get_settings()`. All runtime config comes from environment variables; see `.env.example` for the full list.
 
 ### n8n workflows — `n8n/workflows/`
-Exported n8n workflow JSON (e.g. `whatsapp_buffered_inbound_template.json`) that consume the buffer service's forwarded payloads. These are reference/importable; do not import into a live account without review.
+Sanitized, importable n8n workflow JSON templates (e.g. `whatsapp_buffered_inbound_template.json`) that consume the buffer service's forwarded payloads. Raw exports from a live n8n go to the gitignored `n8n/exports/`. Do not import templates into a live account without review; audit any new/modified workflow JSON with the `n8n-workflow-audit` skill.
 
 ## Docs
-Architecture and deployment notes live in `docs/` — notably `docs/architecture/message-buffer-and-ai-flow.md`, `docs/architecture/conversation_memory.md`, and `docs/deployment/docker-local.md`.
+`docs/REPO-MAP.md` is the index of the whole repository. Architecture and deployment notes live in `docs/` — notably `docs/architecture/message-buffer-and-ai-flow.md`, `docs/architecture/conversation_memory.md`, and `docs/deployment/docker-local.md`. `docs/legacy/` preserves documentation from the pre-Autobots WhatsApp automation for reference only.
