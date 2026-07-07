@@ -10,7 +10,9 @@ flowchart TD
     B --> C[Intent classification]
     C --> D[Notion memory lookup]
     D --> E[Create or update lead]
-    E --> F{Needs human?}
+    E --> T{Human takeover?}
+    T -- yes --> S[Stay silent, CRM only]
+    T -- no --> F{Needs human?}
     F -- yes --> G[Telegram handoff]
     F -- no --> H[Build AI context]
     G --> H
@@ -38,4 +40,10 @@ All templates read secrets and IDs through `$env.*` environment variables. Befor
 - keep human handoff enabled
 
 Do not store n8n credentials, QR sessions, WhatsApp session data, or production execution data in this repository.
-Live exports from n8n can also include workflow IDs, credential names, Telegram chat IDs, calendar account IDs, and other operational metadata. Keep those local or sanitize them before committing; use `whatsapp_buffered_inbound_template.json` as the tracked template.
+
+## Live exports vs. tracked templates
+
+Live exports from n8n include workflow IDs, credential names, Telegram chat IDs, calendar account IDs, and other operational metadata. The convention:
+
+- `n8n/exports/` (gitignored) — raw exports downloaded from the live n8n, named `YYYY-MM-DD-live-<workflow>.json`. Keep them for diffing against the templates; they never get committed.
+- `n8n/workflows/` (tracked) — sanitized templates only. To promote a live export into a template: diff it against the current template, port the changes, replace hardcoded IDs/keys with `$env.*` reads, then run the `n8n-workflow-audit` skill before committing.

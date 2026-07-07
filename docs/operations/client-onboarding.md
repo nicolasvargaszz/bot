@@ -39,7 +39,7 @@ Rules that stay in every prompt:
 
 ## 4. CRM — Notion database
 
-1. Duplicate the CRM template database in your Notion workspace (one database per client).
+1. Duplicate the CRM template database in your Notion workspace (one database per client). Make sure it includes the `Human Takeover` checkbox property — ticking it on a lead silences the bot for that conversation so a human can answer.
 2. Create a Notion internal integration for the client (or reuse the agency integration) and share the database with it.
 3. Put `NOTION_TOKEN` and `NOTION_DATABASE_ID` in the droplet `.env`.
 
@@ -72,11 +72,13 @@ Through the SSH tunnel to the Evolution manager: create the instance (`<client>-
 - [ ] Check Notion → lead exists with conversation memory fields filled.
 - [ ] Send a voice note → transcribed and answered (if `TRANSCRIPTION_PROVIDER` is enabled).
 - [ ] Reply twice with similar questions → responses do not repeat themselves verbatim.
+- [ ] Tick `Human Takeover` on the test lead in Notion, send a message → no bot reply, lead still updated in Notion; untick → replies resume.
 - [ ] Stop n8n (`docker compose stop n8n`), send a message, start it again → buffered payload arrives (retry works).
 
 ## 9. Go-live and handover
 
 - Walk the client through the Telegram alert: what it means, that *they* close the sale.
+- Show them the `Human Takeover` checkbox in Notion: tick it to answer a conversation personally, untick it to hand the conversation back to the bot.
 - Agree on a review call at day 7: read the pilot metrics together — time to first reply, % of inquiries handled without a human, leads captured in CRM.
 - Leave the session monitor active: it alerts if the WhatsApp session drops (re-pairing takes 2 minutes with the QR).
 

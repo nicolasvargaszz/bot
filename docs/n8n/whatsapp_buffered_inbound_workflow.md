@@ -27,7 +27,9 @@ flowchart TD
     I -- no --> K[Create Lead]
     J --> L[Merge Notion Result]
     K --> L
-    L --> M{Handoff needed?}
+    L --> L2{Human takeover active?}
+    L2 -- yes --> F
+    L2 -- no --> M{Handoff needed?}
     M -- yes --> N[Telegram Handoff]
     M -- no --> O[Set Telegram Skipped]
     N --> P[Merge Telegram Result]
@@ -313,10 +315,32 @@ Required Notion properties:
 - Buying Intent
 - Repetition Risk
 - Messages Count
+- Human Takeover (checkbox)
 
 The workflow uses `Phone` as the unique lookup key. Avoid creating one Notion page per message.
 
-### 7. IF: Telegram Handoff Needed
+### 7. IF: Human Takeover Active?
+
+Node name:
+
+```text
+IF: Human Takeover Active?
+```
+
+Runs right after `Merge Notion Result`, before any handoff or reply logic.
+
+When a salesperson wants to answer a contact personally, they tick the
+`Human Takeover` checkbox on the lead's Notion page. From then on the
+workflow still upserts the lead (so the CRM keeps recording inbound
+messages), but it skips the Telegram handoff and the AI reply entirely and
+responds to the buffer service through `Return No Action` with reason
+`human_takeover_active`. Unticking the checkbox resumes automatic replies on
+the next message — no restart or workflow edit needed.
+
+New leads default to takeover off (an unchecked checkbox), so this changes
+nothing until someone opts a conversation out.
+
+### 8. IF: Telegram Handoff Needed
 
 Node name:
 
@@ -333,7 +357,7 @@ Trigger handoff when:
 - Classification confidence is low.
 - Voice transcription failed and there is not enough context.
 
-### 8. Telegram Handoff
+### 9. Telegram Handoff
 
 Node name:
 
@@ -352,7 +376,7 @@ Message should include:
 
 Keep it short enough for a salesperson to scan quickly.
 
-### 9. Build AI Response Context
+### 10. Build AI Response Context
 
 Node name:
 
@@ -377,7 +401,7 @@ The context includes:
 
 This is the key memory step. The response model should continue the conversation from this object.
 
-### 10. Build Reply Request + AI Response Generation
+### 11. Build Reply Request + AI Response Generation
 
 Node names:
 
@@ -405,7 +429,7 @@ Rules:
 
 Use `GEMINI_RESPONSE_MODEL` for the response model so classification can stay cheap and fast.
 
-### 11. Anti-Repetition Validate Reply
+### 12. Anti-Repetition Validate Reply
 
 Node name:
 
@@ -424,7 +448,7 @@ It adjusts the reply when:
 
 If the guard changes the reply, it sets `Repetition Risk` in Notion.
 
-### 12. Notion Update Conversation Memory
+### 13. Notion Update Conversation Memory
 
 Node name:
 
@@ -445,7 +469,7 @@ After response generation, update the lead page with:
 
 This node should not block WhatsApp sending if Notion has a temporary error.
 
-### 13. Evolution API Send Message
+### 14. Evolution API Send Message
 
 Node name:
 
@@ -475,7 +499,7 @@ Body:
 }
 ```
 
-### 14. Return Data To Buffer Service
+### 15. Return Data To Buffer Service
 
 Node name:
 
@@ -495,7 +519,7 @@ Return a JSON response to the FastAPI buffer service:
 }
 ```
 
-### 15. Error Handler
+### 16. Error Handler
 
 Node name:
 
@@ -516,7 +540,6 @@ The error alert should include:
 
 - Replace the simplified IF node with a Switch node for each intent.
 - Add idempotency using `buffer_id` to avoid duplicate CRM updates.
-- Add a "human takeover" field that pauses AI replies.
 - Add Google Calendar nodes in the live workflow if this imported template is used as a replacement.
 - Add a separate workflow for error handling if n8n import does not like multiple triggers.
 - Add a sanitized demo workflow later for public portfolio presentation.
