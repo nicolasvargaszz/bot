@@ -9,7 +9,6 @@ from autobots.handoff.telegram_templates import (
     generate_wants_price_message,
 )
 
-
 BASE_PAYLOAD = {
     "lead_name": "Juan Perez",
     "phone": "0981 123 456",

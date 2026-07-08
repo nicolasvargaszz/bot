@@ -2,8 +2,9 @@
 
 import csv
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 
 def read_json(path: str | Path) -> Any:

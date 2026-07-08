@@ -15,21 +15,24 @@ import csv
 import logging
 import random
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from playwright.async_api import (
     Browser,
     BrowserContext,
-    Error as PlaywrightError,
     Locator,
     Page,
-    TimeoutError as PlaywrightTimeoutError,
     async_playwright,
 )
-
+from playwright.async_api import (
+    Error as PlaywrightError,
+)
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +70,11 @@ class AgentSeed:
     """Datos preliminares extraidos desde la tarjeta del listado."""
 
     profile_url: str
-    name: Optional[str] = None
-    agency: Optional[str] = None
-    bio: Optional[str] = None
-    listings_for_sale: Optional[str] = None
-    languages: Optional[str] = None
+    name: str | None = None
+    agency: str | None = None
+    bio: str | None = None
+    listings_for_sale: str | None = None
+    languages: str | None = None
 
 
 @dataclass
@@ -79,18 +82,18 @@ class AgentProfile:
     """Datos finales de un agente."""
 
     profile_url: str
-    name: Optional[str] = None
-    bio: Optional[str] = None
-    average_sale_price: Optional[str] = None
-    listings_for_sale: Optional[str] = None
-    languages: Optional[str] = None
-    agency: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
-    city_postal_code: Optional[str] = None
-    agency_website: Optional[str] = None
+    name: str | None = None
+    bio: str | None = None
+    average_sale_price: str | None = None
+    listings_for_sale: str | None = None
+    languages: str | None = None
+    agency: str | None = None
+    phone: str | None = None
+    address: str | None = None
+    city_postal_code: str | None = None
+    agency_website: str | None = None
 
-    def to_csv_row(self) -> Dict[str, str]:
+    def to_csv_row(self) -> dict[str, str]:
         """Convierte None a cadenas vacias para un CSV limpio."""
 
         return {
@@ -108,7 +111,7 @@ class AgentProfile:
         }
 
 
-def clean_text(value: Optional[str]) -> Optional[str]:
+def clean_text(value: str | None) -> str | None:
     """Normaliza espacios sin destruir acentos ni signos utiles."""
 
     if value is None:
@@ -131,13 +134,13 @@ def build_listing_page_url(start_url: str, page_number: int) -> str:
     )
 
 
-def normalize_profile_url(href: Optional[str]) -> Optional[str]:
+def normalize_profile_url(href: str | None) -> str | None:
     if not href:
         return None
     return urljoin(BASE_DOMAIN, href)
 
 
-def normalize_website_url(raw_value: Optional[str]) -> Optional[str]:
+def normalize_website_url(raw_value: str | None) -> str | None:
     """Limpia hrefs normales y tambien formatos raros tipo markdown."""
 
     value = clean_text(raw_value)
@@ -237,7 +240,7 @@ async def first_text(
     scope: Page | Locator,
     selectors: Sequence[str],
     max_matches_per_selector: int = 4,
-) -> Optional[str]:
+) -> str | None:
     """Devuelve el primer texto no vacio que matchee alguno de los selectores."""
 
     for selector in selectors:
@@ -263,7 +266,7 @@ async def first_attribute(
     selectors: Sequence[str],
     attribute: str,
     max_matches_per_selector: int = 4,
-) -> Optional[str]:
+) -> str | None:
     """Devuelve el primer atributo no vacio que matchee alguno de los selectores."""
 
     for selector in selectors:
@@ -289,7 +292,7 @@ async def first_attribute(
 async def feature_value_from_scope(
     scope: Page | Locator,
     label_candidates: Iterable[str],
-) -> Optional[str]:
+) -> str | None:
     """Busca pares label/value como los de las tarjetas y perfiles de Properstar."""
 
     labels = list(label_candidates)
@@ -381,7 +384,7 @@ async def feature_value_from_scope(
 async def section_text_by_heading(
     page: Page,
     heading_candidates: Iterable[str],
-) -> Optional[str]:
+) -> str | None:
     """Extrae texto de una seccion cuando el titulo visible es conocido."""
 
     headings = list(heading_candidates)
@@ -463,7 +466,7 @@ async def reveal_contact_info(page: Page) -> None:
             continue
 
 
-async def extract_seed_from_card(card: Locator) -> Optional[AgentSeed]:
+async def extract_seed_from_card(card: Locator) -> AgentSeed | None:
     href = await first_attribute(
         card,
         [
@@ -489,7 +492,7 @@ async def extract_seed_from_card(card: Locator) -> Optional[AgentSeed]:
     )
 
 
-async def extract_agent_links_from_listing_page(page: Page) -> List[AgentSeed]:
+async def extract_agent_links_from_listing_page(page: Page) -> list[AgentSeed]:
     """Extrae los perfiles desde una pagina de listado."""
 
     try:
@@ -503,7 +506,7 @@ async def extract_agent_links_from_listing_page(page: Page) -> List[AgentSeed]:
     await auto_scroll(page, steps=3)
 
     cards = page.locator(".place-agents-list article.item, article.item")
-    seeds: List[AgentSeed] = []
+    seeds: list[AgentSeed] = []
     seen_urls = set()
 
     for index in range(await cards.count()):
@@ -532,16 +535,16 @@ async def extract_agent_links_from_listing_page(page: Page) -> List[AgentSeed]:
 async def collect_agent_seeds(
     context: BrowserContext,
     start_url: str,
-    max_pages: Optional[int],
-    max_agents: Optional[int],
+    max_pages: int | None,
+    max_agents: int | None,
     min_delay: float,
     max_delay: float,
     timeout_ms: int,
-) -> List[AgentSeed]:
+) -> list[AgentSeed]:
     """Recorre la paginacion y acumula URLs unicas de perfiles."""
 
     page = await context.new_page()
-    seed_by_url: Dict[str, AgentSeed] = {}
+    seed_by_url: dict[str, AgentSeed] = {}
     page_number = 1
 
     try:
@@ -765,8 +768,8 @@ async def scrape_agent_profile(
 async def scrape_agents_to_csv(
     output_path: Path,
     start_url: str = DEFAULT_START_URL,
-    max_pages: Optional[int] = None,
-    max_agents: Optional[int] = None,
+    max_pages: int | None = None,
+    max_agents: int | None = None,
     min_delay: float = 1.5,
     max_delay: float = 4.0,
     timeout_ms: int = 30_000,

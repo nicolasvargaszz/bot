@@ -10,7 +10,6 @@ from autobots.services.message_buffer.config import MessageBufferSettings
 from autobots.services.message_buffer.errors import N8NUnavailableError
 from autobots.services.message_buffer.models import CombinedMessagePayload
 
-
 logger = logging.getLogger(__name__)
 
 

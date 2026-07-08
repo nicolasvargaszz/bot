@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-
 AI_UNAVAILABLE_FALLBACK_MESSAGE = (
     "Gracias por escribir. En este momento estoy derivando tu consulta a una "
     "persona del equipo para ayudarte mejor."

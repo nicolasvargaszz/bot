@@ -13,7 +13,7 @@ from autobots.services.message_buffer.n8n_client import N8NClient, N8NDeliveryEr
 
 
 def _basic_auth(username: str, password: str) -> str:
-    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
     return f"Basic {token}"
 
 

@@ -26,11 +26,10 @@ import logging
 import os
 import random
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
-from autobots.scrapers.google_maps import MapsScraper, SELECTORS
+from autobots.scrapers.google_maps import SELECTORS, MapsScraper
 from autobots.utils.phone import is_valid_paraguay_phone, normalize_paraguay_phone_digits
 
 logger = logging.getLogger(__name__)
@@ -102,7 +101,7 @@ def _parse_rating(text: str) -> float:
     return float(match.group(0).replace(",", ".")) if match else 0.0
 
 
-def _extract_category(info_lines: list[str]) -> Optional[str]:
+def _extract_category(info_lines: list[str]) -> str | None:
     """First segment before '·' in the first info line that has one."""
     for line in info_lines:
         if "·" in line:
@@ -113,7 +112,7 @@ def _extract_category(info_lines: list[str]) -> Optional[str]:
     return None
 
 
-def parse_card(raw: dict, query: str, location: str, niche: str) -> Optional[dict]:
+def parse_card(raw: dict, query: str, location: str, niche: str) -> dict | None:
     """Turn a raw card dict from the fetch layer into a validated lead record.
 
     Returns None when the record fails validation (no name, or neither a
@@ -148,7 +147,7 @@ def parse_card(raw: dict, query: str, location: str, niche: str) -> Optional[dic
         "has_website": bool(raw.get("has_website_link")),
         "info_lines": info_lines[:3],
         "place_href": raw.get("href") or None,
-        "scraped_at": datetime.now(timezone.utc).isoformat(),
+        "scraped_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -216,7 +215,7 @@ def append_leads(leads: list[dict], path: Path = OUTPUT_PATH) -> None:
 def log_failed(search: str, reason: str, path: Path = FAILED_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
-        f.write(f"{datetime.now(timezone.utc).isoformat()}\t{search}\t{reason}\n")
+        f.write(f"{datetime.now(UTC).isoformat()}\t{search}\t{reason}\n")
 
 
 # ===========================================

@@ -81,10 +81,10 @@ def contact_cell(lead: dict) -> str:
 
 
 def build_report(leads: list[dict], today: date) -> str:
-    ranked = sorted(leads, key=lambda l: (-(l.get("score") or 0), -(l.get("review_count") or 0)))
-    with_phone = [l for l in ranked if l.get("phone")]
-    mobiles = [l for l in with_phone if l.get("phone_is_mobile")]
-    niches = Counter(l.get("niche", "?") for l in ranked)
+    ranked = sorted(leads, key=lambda lead: (-(lead.get("score") or 0), -(lead.get("review_count") or 0)))
+    with_phone = [lead for lead in ranked if lead.get("phone")]
+    mobiles = [lead for lead in with_phone if lead.get("phone_is_mobile")]
+    niches = Counter(lead.get("niche", "?") for lead in ranked)
 
     lines = [
         f"# Leads — scraping Google Maps {today.isoformat()}",

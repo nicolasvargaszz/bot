@@ -8,7 +8,6 @@ from typing import Any
 from autobots.leads.models import Lead
 from autobots.utils.phone import is_valid_paraguay_phone, normalize_paraguay_phone_digits
 
-
 FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "name": ("name", "nombre", "business_name", "negocio", "title", "place_name"),
     "phone": ("phone", "telefono", "teléfono", "whatsapp", "mobile", "phone_number"),

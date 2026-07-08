@@ -14,12 +14,33 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlparse
 
-from playwright.async_api import async_playwright, Page, Browser, TimeoutError as PlaywrightTimeout
+from playwright.async_api import Browser, Page, async_playwright
+from playwright.async_api import TimeoutError as PlaywrightTimeout
 
 logger = logging.getLogger(__name__)
+
+
+def _upgrade_to_high_res(url: str) -> str:
+    """Convert Google image URL to high resolution (1200x800)"""
+    if not url:
+        return url
+    # Remove all size parameters first to avoid partial replacements
+    high_res = re.sub(r'=w\d+-h\d+-[a-z]+', '=w1200-h800-k-no', url)
+    high_res = re.sub(r'=w\d+-h\d+', '=w1200-h800', high_res)
+    high_res = re.sub(r'=s\d+-', '=s1200-', high_res)
+    # Individual size replacements for edge cases
+    high_res = high_res.replace('=w80-', '=w1200-')
+    high_res = high_res.replace('=w100-', '=w1200-')
+    high_res = high_res.replace('=w200-', '=w1200-')
+    high_res = high_res.replace('=w400-', '=w1200-')
+    high_res = high_res.replace('=w800-', '=w1200-')
+    high_res = high_res.replace('-h100-', '-h800-')
+    high_res = high_res.replace('-h200-', '-h800-')
+    high_res = high_res.replace('-h400-', '-h800-')
+    high_res = high_res.replace('-h600-', '-h800-')
+    return high_res
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -142,12 +163,12 @@ SELECTORS = {
 class ScrapedBusiness:
     """Raw business data from Google Maps - ULTRA Deep Data Version"""
     name: str
-    google_place_id: Optional[str] = None
-    category: Optional[str] = None
-    address: Optional[str] = None
+    google_place_id: str | None = None
+    category: str | None = None
+    address: str | None = None
     city: str = "Asunción"
-    neighborhood: Optional[str] = None
-    phone: Optional[str] = None
+    neighborhood: str | None = None
+    phone: str | None = None
     rating: float = 0.0
     review_count: int = 0  # FIX: Track review count explicitly
     photo_urls: list = field(default_factory=list)
@@ -155,16 +176,16 @@ class ScrapedBusiness:
     
     # Website detection
     has_website: bool = False
-    website_url: Optional[str] = None
+    website_url: str | None = None
     website_status: str = "none"  # none, social_only, dead, active
     
     # FIX 5: About/Description from Google
-    about_summary: Optional[str] = None  # Business description from "About" section
+    about_summary: str | None = None  # Business description from "About" section
     
     # Price Data
-    price_range: Optional[str] = None  # e.g., "₲ 20.000-40.000"
+    price_range: str | None = None  # e.g., "₲ 20.000-40.000"
     price_level: int = 0  # 1-4 ($, $$, $$$, $$$$)
-    price_per_person: Optional[str] = None  # "₲ 20.000-40.000 por persona"
+    price_per_person: str | None = None  # "₲ 20.000-40.000 por persona"
     price_voters: int = 0  # "Notificado por 79 personas"
     price_histogram: dict = field(default_factory=dict)  # {"₲ 1-20.000": 0, "₲ 20.000-40.000": 42, ...}
     
@@ -182,23 +203,23 @@ class ScrapedBusiness:
     
     # Opening hours - structured
     opening_hours: dict = field(default_factory=dict)  # {"monday": "07:00-20:00", ...}
-    is_open_now: Optional[bool] = None
-    open_status_text: Optional[str] = None  # "Cerrado · Abre a las 7 a. m. del lun"
+    is_open_now: bool | None = None
+    open_status_text: str | None = None  # "Cerrado · Abre a las 7 a. m. del lun"
     
     # Popular Times (Horas Punta) - hourly busyness by day
     popular_times: dict = field(default_factory=dict)  # {"monday": {"6": 0, "7": 14, ...}, ...}
     
     # Third-party links
-    order_link: Optional[str] = None  # PedidosYa, UberEats, etc.
-    order_provider: Optional[str] = None  # "pedidosya", "ubereats", etc.
-    menu_link: Optional[str] = None
-    reserve_link: Optional[str] = None
+    order_link: str | None = None  # PedidosYa, UberEats, etc.
+    order_provider: str | None = None  # "pedidosya", "ubereats", etc.
+    menu_link: str | None = None
+    reserve_link: str | None = None
     
     # Social media (separate from website)
     social_media: dict = field(default_factory=dict)  # {instagram, facebook, tiktok}
     
     # Plus Code for precise location
-    plus_code: Optional[str] = None  # "MCX9+73 Asunción"
+    plus_code: str | None = None  # "MCX9+73 Asunción"
     
     # Photo Categories
     photo_categories: list = field(default_factory=list)  # ["Carta", "Ambiente", "Comida y bebida", ...]
@@ -216,8 +237,8 @@ class ScrapedBusiness:
     customer_updates: list = field(default_factory=list)  # [{"text", "date"}, ...]
     
     # Metadata
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    latitude: float | None = None
+    longitude: float | None = None
     scraped_at: datetime = field(default_factory=datetime.utcnow)
     raw_data: dict = field(default_factory=dict)
     
@@ -310,8 +331,8 @@ class MapsScraper:
         self.max_results = max_results_per_search
         self.timeout = timeout
         
-        self.browser: Optional[Browser] = None
-        self.page: Optional[Page] = None
+        self.browser: Browser | None = None
+        self.page: Page | None = None
         self.results: list[ScrapedBusiness] = []
         
         # Load locations config
@@ -322,7 +343,7 @@ class MapsScraper:
         """Load locations from config file"""
         config_path = PACKAGE_ROOT / "config" / "locations.json"
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             logger.warning(f"Locations config not found at {config_path}")
@@ -332,7 +353,7 @@ class MapsScraper:
         """Load categories from config file"""
         config_path = PACKAGE_ROOT / "config" / "categories.json"
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             logger.warning(f"Categories config not found at {config_path}")
@@ -357,7 +378,7 @@ class MapsScraper:
         except Exception:
             return False
     
-    def _classify_social_media(self, url: str) -> Optional[str]:
+    def _classify_social_media(self, url: str) -> str | None:
         """Classify which social media platform a URL belongs to"""
         if not url:
             return None
@@ -529,7 +550,7 @@ class MapsScraper:
             return "doordash"
         return "other"
     
-    def _extract_place_id(self, url: str) -> Optional[str]:
+    def _extract_place_id(self, url: str) -> str | None:
         """Extract Google Place ID from URL"""
         if not url:
             return None
@@ -615,7 +636,7 @@ class MapsScraper:
         self,
         query: str,
         location: str,
-        max_results: Optional[int] = None
+        max_results: int | None = None
     ) -> list[ScrapedBusiness]:
         """
         Search for businesses on Google Maps.
@@ -804,7 +825,7 @@ class MapsScraper:
         logger.info(f"✅ Collected {len(collected)} business links (target was {target_count})")
         return collected[:target_count]
     
-    async def _extract_business_details(self, element, location: str) -> Optional[ScrapedBusiness]:
+    async def _extract_business_details(self, element, location: str) -> ScrapedBusiness | None:
         """Extract details from a business listing - ULTRA DEEP DATA VERSION
         
         CRITICAL FIXES (2025 Overhaul):
@@ -962,7 +983,7 @@ class MapsScraper:
                             rating = self._parse_rating(await rating_el.inner_text())
                             if rating > 0:
                                 break
-                    except:
+                    except Exception:
                         pass
             
             if review_count == 0:
@@ -974,7 +995,7 @@ class MapsScraper:
                             review_count = self._parse_review_count(review_text)
                             if review_count > 0:
                                 break
-                    except:
+                    except Exception:
                         pass
             
             logger.info(f"📊 {name}: ⭐{rating} ({review_count} reviews)")
@@ -1562,26 +1583,6 @@ class MapsScraper:
             photo_count = 0
             photo_urls = []
             
-            def _upgrade_to_high_res(url: str) -> str:
-                """Convert Google image URL to high resolution (1200x800)"""
-                if not url:
-                    return url
-                # Remove all size parameters first to avoid partial replacements
-                high_res = re.sub(r'=w\d+-h\d+-[a-z]+', '=w1200-h800-k-no', url)
-                high_res = re.sub(r'=w\d+-h\d+', '=w1200-h800', high_res)
-                high_res = re.sub(r'=s\d+-', '=s1200-', high_res)
-                # Individual size replacements for edge cases
-                high_res = high_res.replace('=w80-', '=w1200-')
-                high_res = high_res.replace('=w100-', '=w1200-')
-                high_res = high_res.replace('=w200-', '=w1200-')
-                high_res = high_res.replace('=w400-', '=w1200-')
-                high_res = high_res.replace('=w800-', '=w1200-')
-                high_res = high_res.replace('-h100-', '-h800-')
-                high_res = high_res.replace('-h200-', '-h800-')
-                high_res = high_res.replace('-h400-', '-h800-')
-                high_res = high_res.replace('-h600-', '-h800-')
-                return high_res
-            
             # Get total photo count from button
             photos_btn = await self.page.query_selector('button[jsaction*="photos"]')
             if photos_btn:
@@ -1616,7 +1617,7 @@ class MapsScraper:
                                 await self._random_delay(0.5)
                                 logger.debug(f"Clicked on owner photos tab: {tab_selector}")
                                 break
-                            except:
+                            except Exception:
                                 pass
                     
                     # Get photos ONLY from the main gallery area, NOT from recommendations section
@@ -1639,7 +1640,7 @@ class MapsScraper:
                                 parent_html = await img.evaluate('el => el.closest("div[class*=\'m6QErb\'], div[class*=\'recommendation\'], div[class*=\'suggest\']")?.className || ""')
                                 if 'recommendation' in parent_html.lower() or 'suggest' in parent_html.lower():
                                     continue
-                            except:
+                            except Exception:
                                 pass
                             
                             src = await img.get_attribute("src")
@@ -1811,8 +1812,8 @@ class MapsScraper:
     
     async def run_discovery(
         self,
-        categories: Optional[list[str]] = None,
-        cities: Optional[list[str]] = None,
+        categories: list[str] | None = None,
+        cities: list[str] | None = None,
     ) -> list[ScrapedBusiness]:
         """
         Run full discovery process across configured locations and categories.
@@ -1901,7 +1902,7 @@ def load_existing_data(filepath: str) -> tuple[list[dict], set[str], set[str]]:
     seen_phones = set()
     
     try:
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             existing_data = json.load(f)
             for b in existing_data:
                 seen_names.add(b.get('name', ''))
@@ -2316,10 +2317,10 @@ async def main():
         no_website = [b for b in all_results if not b.get('has_website', True)]
         
         print(f"\n{'='*60}")
-        print(f"DISCOVERY COMPLETE")
+        print("DISCOVERY COMPLETE")
         print(f"{'='*60}")
         if RESCRAPE_ALL:
-            print(f"RE-SCRAPE MODE: All businesses updated with new data")
+            print("RE-SCRAPE MODE: All businesses updated with new data")
         else:
             print(f"Previous businesses: {len(existing_data)}")
         print(f"Total businesses scraped: {len(all_results)}")

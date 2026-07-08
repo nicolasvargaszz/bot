@@ -7,13 +7,13 @@ Con autenticación básica, filtros por categoría y score de compra
 import base64
 import hmac
 import os
-import sys
-import json
 import re
 import sqlite3
+import sys
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+
 from flask import Flask, Response, jsonify, render_template_string, request
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -99,7 +99,8 @@ def add_security_headers(response):
     return response
 
 try:
-    from editor import editor_bp, init_db as init_editor_db
+    from editor import editor_bp
+    from editor import init_db as init_editor_db
 except ImportError:
     editor_bp = None
 
@@ -156,7 +157,6 @@ CATEGORIA_GENERAL = {
     'Centro de yoga': 'Belleza y Bienestar',
     'Centro de pilates': 'Belleza y Bienestar',
     'Balneario': 'Belleza y Bienestar',
-    'Gimnasio': 'Belleza y Bienestar',
     'Centro deportivo': 'Belleza y Bienestar',
     'Salón de belleza': 'Belleza y Bienestar',
     'Salón de uñas': 'Belleza y Bienestar',
@@ -167,7 +167,6 @@ CATEGORIA_GENERAL = {
     'Farmacia': 'Salud',
     'Farmacia veterinaria': 'Salud',
     'Veterinaria': 'Salud',
-    'Óptica': 'Salud',
     'Clínica': 'Salud',
     'Hospital': 'Salud',
     'Laboratorio': 'Salud',

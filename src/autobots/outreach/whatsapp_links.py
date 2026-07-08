@@ -1,6 +1,6 @@
 """Generate WhatsApp click-to-chat links without sending messages."""
 
-from typing import Mapping
+from collections.abc import Mapping
 from urllib.parse import quote
 
 from autobots.leads.models import Lead

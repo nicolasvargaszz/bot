@@ -1,8 +1,6 @@
 """Phone number helpers for Paraguay and WhatsApp links."""
 
 import re
-from typing import Optional
-
 
 PARAGUAY_COUNTRY_CODE = "595"
 
@@ -12,7 +10,7 @@ def digits_only(value: object) -> str:
     return re.sub(r"\D+", "", str(value or ""))
 
 
-def normalize_paraguay_phone_digits(phone: object) -> Optional[str]:
+def normalize_paraguay_phone_digits(phone: object) -> str | None:
     """
     Normalize a Paraguay phone number to digits-only international format.
 
