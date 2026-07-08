@@ -14,7 +14,8 @@ Imported as the `autobots.*` package; every command needs `PYTHONPATH=src`.
 
 | Path | What it is | Why it exists |
 |---|---|---|
-| `services/message_buffer/` | FastAPI service: receives Evolution API webhooks, buffers WhatsApp message fragments per sender in Redis, forwards one combined payload to n8n | The core of the live product. WhatsApp users write in short bursts; without buffering the AI answers each fragment separately |
+| `services/message_buffer/` | FastAPI service: receives Evolution API webhooks, buffers WhatsApp message fragments per sender in Redis, forwards one combined payload to n8n. Includes a dead-letter queue with automatic redelivery, per-instance usage metrics, and a token-protected `/admin` API | The core of the live product. WhatsApp users write in short bursts; without buffering the AI answers each fragment separately |
+| `reporting/` | `pilot_report.py` renders buffer-service metrics as a Spanish Markdown report | The deliverable for the day-7 pilot review call with a client |
 | `scrapers/` | Playwright scrapers: Google Maps (`google_maps.py`, `leadgen_maps.py`) and Properstar (`properstar_agents.py`) | Finds the businesses we sell the service to |
 | `leads/` | Cleaning (`cleaner.py`) and 0–100 scoring (`scorer.py`) of scraped leads; `pipeline.py` orchestrates into SQLite | Prioritizes which businesses to contact first |
 | `outreach/` | `whatsapp_links.py` builds `wa.me` links; `message_generator.py` writes outreach messages; `leadgen_report.py` summarizes scrape runs | Manual outreach only — this repo never sends outbound WhatsApp campaigns |
@@ -66,6 +67,8 @@ Only `data/README.md` and `.gitkeep` files are tracked. `raw/` holds scraper out
 | `docker-compose.yml` | Full local stack: Postgres, Redis, Evolution API, n8n, message buffer |
 | `Dockerfile.message-buffer` | Image for the buffer service |
 | `requirements.txt` | Python dependencies |
+| `pyproject.toml` | pytest config (`pythonpath=src`) and ruff lint rules |
+| `Makefile` | Shortcuts: `make test`, `make lint`, `make buffer`, `make report`, `make stack` |
 | `.env.example` | Every environment variable the system reads, documented |
 | `LICENSE` | MIT |
 | `.github/workflows/` | `ci.yml` (pytest) and `pages.yml` (landing deploy) |
