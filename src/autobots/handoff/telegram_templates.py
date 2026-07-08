@@ -10,7 +10,6 @@ from typing import Literal
 
 from autobots.utils.phone import normalize_paraguay_phone_digits
 
-
 HandoffCategory = Literal[
     "hot_lead",
     "wants_price",

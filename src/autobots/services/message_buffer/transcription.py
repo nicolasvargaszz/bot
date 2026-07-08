@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-import logging
 from typing import Any
 
 import httpx
@@ -17,7 +17,6 @@ from autobots.services.message_buffer.audio import (
 )
 from autobots.services.message_buffer.config import MessageBufferSettings
 from autobots.services.message_buffer.models import IncomingMessage, MessageType
-
 
 logger = logging.getLogger(__name__)
 

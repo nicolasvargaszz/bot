@@ -6,12 +6,11 @@ This agent evaluates scraped businesses and decides if they are worth contacting
 No UI, no outreach - pure analysis and qualification.
 """
 
+import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-import json
-import logging
 
 from autobots.leads.models import Lead, LeadScore, Niche
 
@@ -257,16 +256,16 @@ class BusinessInput:
     category: str
     address: str
     city: str = "Asunción"
-    neighborhood: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
+    neighborhood: str | None = None
+    phone: str | None = None
+    email: str | None = None
     rating: float = 0.0
     review_count: int = 0
     photo_count: int = 0
     has_website: bool = False
-    existing_website: Optional[str] = None
-    hours: Optional[dict] = None
-    raw_data: Optional[dict] = None
+    existing_website: str | None = None
+    hours: dict | None = None
+    raw_data: dict | None = None
 
 
 @dataclass
@@ -651,7 +650,7 @@ class BusinessAnalyzer:
     
     def _get_location_key(
         self, 
-        neighborhood: Optional[str], 
+        neighborhood: str | None, 
         city: str
     ) -> str:
         """Get location tier key"""
@@ -705,23 +704,8 @@ def store_analysis_result(result: AnalysisResult, db_connection) -> None:
     WHERE id = :business_id
     """
     
-    new_status = {
-        Decision.GO: "qualified",
-        Decision.REVIEW: "manual_review", 
-        Decision.NO_GO: "low_priority"
-    }.get(result.decision, "low_priority")
-    
-    # This would use SQLAlchemy or asyncpg
-    query = """
-        UPDATE businesses SET
-            score = $1,
-            score_breakdown = $2,
-            status = $3,
-            analyzed_at = NOW()
-        WHERE id = $4
-    """
-    
-    # Execute: db_connection.execute(query, params)
+    # Placeholder: the SQL above documents the intended write; wire a real
+    # connection here if the SQLite pipeline is ever replaced by Postgres.
     logger.info(
         f"Stored analysis for {result.business_id}: "
         f"score={result.total_score}, decision={result.decision.value}"

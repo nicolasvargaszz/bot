@@ -23,10 +23,15 @@ pip install -r requirements.txt
 python -m playwright install chromium   # only needed for scrapers
 cp .env.example .env
 
-# Tests (pytest with pytest-asyncio)
-PYTHONPATH=src pytest
-PYTHONPATH=src pytest tests/test_message_buffer_combine.py            # single file
-PYTHONPATH=src pytest tests/test_message_buffer_combine.py::test_name  # single test
+# Tests (pytest with pytest-asyncio; pyproject.toml sets pythonpath=src)
+pytest
+pytest tests/test_message_buffer_combine.py            # single file
+pytest tests/test_message_buffer_combine.py::test_name  # single test
+
+# Lint (ruff, config in pyproject.toml; CI enforces it)
+ruff check src tests
+
+# Makefile shortcuts: make help | test | lint | buffer | report | stack
 
 # Run the message buffer service (FastAPI)
 PYTHONPATH=src uvicorn autobots.services.message_buffer.app:app --host 0.0.0.0 --port 8081 --reload
@@ -40,11 +45,24 @@ DASHBOARD_PASSWORD=some-local-password PYTHONPATH=src python -m autobots.dashboa
 # Generate manual WhatsApp links from a JSON lead export
 PYTHONPATH=src python -m autobots.outreach.message_generator
 
+# Spanish pilot report from buffer-service metrics (day-7 client review)
+PYTHONPATH=src python -m autobots.reporting.pilot_report --instance cliente-main --days 7
+
 # Full local stack (postgres, redis, evolution-api, n8n, message-buffer)
 docker compose up
 ```
 
-Note: `agents.md` in the repo root is an unrelated personal document (a career/business plan), not engineering guidance.
+## Repository layout conventions
+
+`docs/REPO-MAP.md` explains every directory and why it exists. Several directories are deliberately **gitignored** because they hold private business or personal material; they exist locally but never reach GitHub:
+
+- `docs/business/` — pricing, sales scripts, launch plans (private strategy).
+- `docs/handbook/` — Nicolás's personal Spanish reading room; `docs/handbook/personal/` holds personal documents (career plans, reports) that are not engineering guidance.
+- `prompts/` — per-niche AI agent prompts used when cloning n8n workflows for clients.
+- `data/templates/` — sales/CRM template files.
+- `n8n/exports/` — raw exports from the live n8n (contain workflow IDs/operational metadata); only sanitized templates are tracked under `n8n/workflows/`.
+
+Do not track these paths, and do not move private material out of them into tracked locations.
 
 ## Architecture
 
@@ -56,9 +74,11 @@ Key pieces:
 - `debouncer.py` — `DebounceWorker` polls Redis for sessions whose debounce window (`MESSAGE_BUFFER_SECONDS`) has expired and flushes them.
 - `redis_store.py` — per-sender message storage + dedup.
 - `models.py` — `EvolutionWebhookParser` and `combine_buffered_messages` (message-combining logic).
-- `n8n_client.py` / `retry.py` — outbound forwarding with retry.
+- `n8n_client.py` / `retry.py` — outbound forwarding and backoff math.
+- `redelivery.py` — `RedeliveryWorker` retries dead-lettered payloads (Redis DLQ: `dlq:pending` zset + `dlq:entry:*`) with exponential backoff until `DLQ_MAX_ATTEMPTS`.
+- `metrics.py` — `MetricsRecorder`, per-instance daily/hourly Redis counters (fire-and-forget; must never break the pipeline). Read by `/admin/stats` and `autobots.reporting.pilot_report`.
 - `transcription.py` / `audio.py` — optional voice-note transcription (off by default, `TRANSCRIPTION_PROVIDER=disabled`).
-- Webhook auth uses HMAC secrets (`EVOLUTION_BUFFER_WEBHOOK_SECRET` inbound, `N8N_BUFFERED_WEBHOOK_SECRET` outbound).
+- Webhook auth uses HMAC secrets (`EVOLUTION_BUFFER_WEBHOOK_SECRET` inbound, `N8N_BUFFERED_WEBHOOK_SECRET` outbound). The `/admin/*` endpoints require `ADMIN_API_TOKEN` via the `X-Autobots-Admin-Token` header and fail closed (503) when unset.
 
 ### Legacy lead pipeline — `src/autobots/leads/`, `scrapers/`, `outreach/`
 - `scrapers/` — Google Maps (`google_maps.py`) and Properstar (`properstar_agents.py`) lead discovery (Playwright).
@@ -72,7 +92,7 @@ Key pieces:
 - `src/autobots/services/message_buffer/config.py` — `MessageBufferSettings` (pydantic-settings), loaded via `get_settings()`. All runtime config comes from environment variables; see `.env.example` for the full list.
 
 ### n8n workflows — `n8n/workflows/`
-Exported n8n workflow JSON (e.g. `whatsapp_buffered_inbound_template.json`) that consume the buffer service's forwarded payloads. These are reference/importable; do not import into a live account without review.
+Sanitized, importable n8n workflow JSON templates (e.g. `whatsapp_buffered_inbound_template.json`) that consume the buffer service's forwarded payloads. Raw exports from a live n8n go to the gitignored `n8n/exports/`. Do not import templates into a live account without review; audit any new/modified workflow JSON with the `n8n-workflow-audit` skill.
 
 ## Docs
-Architecture and deployment notes live in `docs/` — notably `docs/architecture/message-buffer-and-ai-flow.md`, `docs/architecture/conversation_memory.md`, and `docs/deployment/docker-local.md`.
+`docs/REPO-MAP.md` is the index of the whole repository. Architecture and deployment notes live in `docs/` — notably `docs/architecture/message-buffer-and-ai-flow.md`, `docs/architecture/conversation_memory.md`, and `docs/deployment/docker-local.md`. `docs/legacy/` preserves documentation from the pre-Autobots WhatsApp automation for reference only.

@@ -6,9 +6,10 @@ Ordena por probabilidad de compra, incluye todos los datos de contacto
 
 import json
 import sqlite3
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from autobots.leads.cleaner import clean_leads
 from autobots.leads.models import OUTPUT_FIELDS, Lead, Niche, ProcessedLead
@@ -136,7 +137,7 @@ def process_leads_file(
 
 def cargar_datos():
     """Carga los datos de negocios"""
-    with open(LEGACY_DATA_PATH, 'r', encoding='utf-8') as f:
+    with open(LEGACY_DATA_PATH, encoding='utf-8') as f:
         return json.load(f)
 
 
@@ -430,7 +431,7 @@ def generar_resumen(leads):
             'lotes': {}
         }
 
-    total_lotes = max(l['lote'] for l in leads) if leads else 0
+    total_lotes = max(lead['lote'] for lead in leads) if leads else 0
     
     # Estadísticas por lote
     lotes_info = {}
@@ -455,16 +456,16 @@ def generar_resumen(leads):
             lotes_info[lote]['sin_web'] += 1
     
     # Calcular promedios
-    for lote, info in lotes_info.items():
+    for info in lotes_info.values():
         info['score_promedio'] = round(info['score_promedio'] / info['total'], 1)
     
     resumen = {
         'total_leads': len(leads),
         'total_lotes': total_lotes,
-        'score_promedio_general': round(sum(l['score_compra'] for l in leads) / len(leads), 1),
-        'con_instagram': sum(1 for l in leads if l['instagram']),
-        'con_facebook': sum(1 for l in leads if l['facebook']),
-        'sin_website': sum(1 for l in leads if not l['tiene_web']),
+        'score_promedio_general': round(sum(lead['score_compra'] for lead in leads) / len(leads), 1),
+        'con_instagram': sum(1 for lead in leads if lead['instagram']),
+        'con_facebook': sum(1 for lead in leads if lead['facebook']),
+        'sin_website': sum(1 for lead in leads if not lead['tiene_web']),
         'lotes': lotes_info
     }
     

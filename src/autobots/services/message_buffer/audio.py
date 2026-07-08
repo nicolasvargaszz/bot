@@ -1,16 +1,15 @@
 """Audio metadata and safe temporary-file helpers."""
 
-from collections.abc import Mapping
-from pathlib import Path
 import base64
 import binascii
 import tempfile
+from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import httpx
 
 from autobots.services.message_buffer.config import MessageBufferSettings
-
 
 AUDIO_MESSAGE_KEYS = (
     "audioMessage",

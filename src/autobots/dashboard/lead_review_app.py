@@ -8,7 +8,6 @@ from typing import Any
 
 import streamlit as st
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROCESSED_DATA_DIR = PROJECT_ROOT / "data" / "processed"
 

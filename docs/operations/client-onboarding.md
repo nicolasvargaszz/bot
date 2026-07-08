@@ -39,7 +39,7 @@ Rules that stay in every prompt:
 
 ## 4. CRM — Notion database
 
-1. Duplicate the CRM template database in your Notion workspace (one database per client).
+1. Duplicate the CRM template database in your Notion workspace (one database per client). Make sure it includes the `Human Takeover` checkbox property — ticking it on a lead silences the bot for that conversation so a human can answer.
 2. Create a Notion internal integration for the client (or reuse the agency integration) and share the database with it.
 3. Put `NOTION_TOKEN` and `NOTION_DATABASE_ID` in the droplet `.env`.
 
@@ -72,12 +72,19 @@ Through the SSH tunnel to the Evolution manager: create the instance (`<client>-
 - [ ] Check Notion → lead exists with conversation memory fields filled.
 - [ ] Send a voice note → transcribed and answered (if `TRANSCRIPTION_PROVIDER` is enabled).
 - [ ] Reply twice with similar questions → responses do not repeat themselves verbatim.
-- [ ] Stop n8n (`docker compose stop n8n`), send a message, start it again → buffered payload arrives (retry works).
+- [ ] Tick `Human Takeover` on the test lead in Notion, send a message → no bot reply, lead still updated in Notion; untick → replies resume.
+- [ ] Stop n8n (`docker compose stop n8n`), send a message, start n8n again → the payload is redelivered automatically from the dead-letter queue within ~30s (check `GET /admin/dlq` while n8n is down: the entry is parked there, then disappears).
 
 ## 9. Go-live and handover
 
 - Walk the client through the Telegram alert: what it means, that *they* close the sale.
-- Agree on a review call at day 7: read the pilot metrics together — time to first reply, % of inquiries handled without a human, leads captured in CRM.
+- Show them the `Human Takeover` checkbox in Notion: tick it to answer a conversation personally, untick it to hand the conversation back to the bot.
+- Agree on a review call at day 7. Generate the report for it on the droplet:
+  ```bash
+  PYTHONPATH=src python -m autobots.reporting.pilot_report \
+      --instance <client>-main --days 7 --business-hours 08-18 --output reporte.md
+  ```
+  It shows messages handled, instant replies, the share of inquiries arriving outside business hours, peak hours, and reliability — in Spanish, ready to read with the client. Cross-check leads captured in Notion.
 - Leave the session monitor active: it alerts if the WhatsApp session drops (re-pairing takes 2 minutes with the QR).
 
 ## 10. Offboarding (if the pilot does not convert)

@@ -36,7 +36,7 @@ flowchart LR
 
 Two custom pieces do the work n8n cannot do well alone:
 
-- **Message buffer service** (`src/autobots/services/message_buffer/`) — FastAPI + Redis. Debounces WhatsApp message fragments per sender (8s quiet window), deduplicates webhook retries, optionally transcribes voice notes (Whisper via OpenAI or Azure), and forwards one combined payload to n8n. Retries with bounded exponential backoff when n8n is down.
+- **Message buffer service** (`src/autobots/services/message_buffer/`) — FastAPI + Redis. Debounces WhatsApp message fragments per sender (8s quiet window), deduplicates webhook retries, optionally transcribes voice notes (Whisper via OpenAI or Azure), and forwards one combined payload to n8n. When n8n is down, payloads are parked in a dead-letter queue and redelivered automatically with bounded exponential backoff — no message is lost.
 - **n8n workflow templates** (`n8n/workflows/`) — the flagship buffered-inbound workflow (intent classification, Notion memory upsert, anti-repetition reply validation, Telegram handoff), plus an error-alert workflow and a WhatsApp session monitor. All templates are sanitized: every secret and ID comes from environment variables.
 
 AI calls are provider-agnostic: `AI_PROVIDER=azure` uses Azure OpenAI (Student Pack credits), `AI_PROVIDER=gemini` uses the Gemini free tier. Switching is a `.env` change; request building and response parsing handle both shapes.
@@ -49,16 +49,28 @@ AI calls are provider-agnostic: `AI_PROVIDER=azure` uses Azure OpenAI (Student P
 - Production has no public HTTP surface: only SSH is exposed; admin UIs are reached through SSH tunnels (see the [deployment guide](docs/deployment/digitalocean.md)).
 - The legacy Flask dashboard requires Basic Auth (constant-time comparison) and binds to `127.0.0.1`.
 
+## Operations
+
+The buffer service is built to be run for paying clients, not just demoed:
+
+- **Dead-letter queue** — undeliverable payloads are retried with exponential backoff (`DLQ_*` settings) and can be inspected, replayed, or discarded through the admin API. A payload that exhausts its retry budget is logged and counted, never silently dropped.
+- **Admin API** — `GET /admin/buffers` (sessions waiting in the buffer), `GET /admin/dlq` + `POST /admin/dlq/replay`, and `GET /admin/stats` (per-instance daily counters + hourly histogram). All fail closed behind an `X-Autobots-Admin-Token` header; the endpoints return 503 until `ADMIN_API_TOKEN` is set.
+- **Per-client usage metrics** — every instance gets daily counters (messages, combined bursts, voice notes, duplicates, delivery outcomes) and an hourly histogram bucketed in the client's timezone (`STATS_TIMEZONE`).
+- **Pilot report** — `python -m autobots.reporting.pilot_report --instance cliente-main --days 7` renders the metrics as a Spanish Markdown report for the day-7 pilot review: messages handled, instant replies, share of inquiries arriving outside business hours, peak hours, and reliability.
+
 ## Repository layout
 
+Full map with the reasoning behind every directory: [docs/REPO-MAP.md](docs/REPO-MAP.md). The short version:
+
 - `src/autobots/services/message_buffer/` — the FastAPI buffer service
-- `n8n/workflows/` — sanitized n8n workflow templates (`legacy/` holds the superseded PoC)
+- `n8n/workflows/` — sanitized n8n workflow templates (`legacy/` holds the superseded PoC); raw live exports stay in the untracked `n8n/exports/`
 - `web/` — static landing page (vanilla HTML/CSS, no build step), deployed to GitHub Pages on every push to `main`
 - `docs/architecture/` — design notes: buffer + AI flow, conversation memory, error handling, handoff
 - `docs/deployment/` — Docker local setup and the DigitalOcean production guide
 - `docs/operations/` — the client onboarding runbook (signed pilot → live in one day)
+- `docs/legacy/` — preserved docs from the pre-Autobots WhatsApp automation, reference only
 - `src/autobots/{scrapers,leads,outreach,dashboard}/` — lead-generation tooling from the project this grew out of (Google Maps/Properstar scraping, lead scoring, manual outreach links)
-- `prompts/`, `docs/business/` — per-niche agent prompts and business assets, kept local and untracked
+- `prompts/`, `docs/business/`, `docs/handbook/` — per-niche agent prompts, business strategy, and personal notes, kept local and untracked
 
 ## Running it
 

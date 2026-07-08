@@ -3,15 +3,15 @@ Generador de plantilla Excel con URLs de WhatsApp para contacto con negocios.
 """
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
+
 from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill
 
 from autobots.leads.models import Lead, Niche
 from autobots.outreach.whatsapp_links import generate_wa_me_link
 from autobots.utils.phone import normalize_paraguay_phone_digits
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -74,7 +74,7 @@ def generar_plantilla_excel(leads_file=None, output_file=None):
     leads_file = Path(leads_file) if leads_file else PROJECT_ROOT / "data" / "processed" / "leads.json"
     output_file = Path(output_file) if output_file else PROJECT_ROOT / "data" / "processed" / "plantilla_whatsapp_contacto.xlsx"
     
-    with open(leads_file, 'r', encoding='utf-8') as f:
+    with open(leads_file, encoding='utf-8') as f:
         leads = json.load(f)
     
     # Crear workbook

@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-
 Niche = Literal["real_estate", "retail", "clinics", "beauty"]
 
 SUPPORTED_NICHES: tuple[Niche, ...] = (

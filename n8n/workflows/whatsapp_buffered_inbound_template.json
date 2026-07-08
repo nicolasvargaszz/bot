@@ -164,7 +164,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.1,
       "position": [
-        2440,
+        2660,
         380
       ]
     },
@@ -181,7 +181,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        2660,
+        2880,
         260
       ]
     },
@@ -203,7 +203,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3320,
+        3540,
         380
       ]
     },
@@ -216,7 +216,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3540,
+        3760,
         380
       ]
     },
@@ -248,7 +248,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3980,
+        4200,
         380
       ]
     },
@@ -263,14 +263,14 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        4200,
+        4420,
         380
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({\n  ok: true,\n  ignored: true,\n  reason: $json.intent || 'spam_or_not_interested'\n}) }}",
+        "responseBody": "={{ JSON.stringify({\n  ok: true,\n  ignored: true,\n  reason: $json.human_takeover === true\n    ? 'human_takeover_active'\n    : ($json.intent || 'spam_or_not_interested')\n}) }}",
         "options": {}
       },
       "id": "respond-no-action",
@@ -349,7 +349,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const lead = $('Parse Classification').item.json;\nconst query = $input.first().json || {};\nconst existing = Array.isArray(query.results) && query.results.length > 0 ? query.results[0] : null;\nconst props = existing?.properties || {};\n\nfunction rich(name) {\n  const prop = props[name];\n  if (!prop) return '';\n  const parts = prop.rich_text || prop.title || [];\n  return parts.map(part => part.plain_text || part.text?.content || '').join('').trim();\n}\nfunction title(name) {\n  return (props[name]?.title || []).map(part => part.plain_text || part.text?.content || '').join('').trim();\n}\nfunction select(name) { return props[name]?.select?.name || ''; }\nfunction phone(name) { return props[name]?.phone_number || ''; }\nfunction date(name) { return props[name]?.date?.start || ''; }\nfunction checkbox(name) { return props[name]?.checkbox === true; }\nfunction number(name) { return typeof props[name]?.number === 'number' ? props[name].number : 0; }\n\nconst memory = {\n  phone: title('Phone') || lead.phone || '',\n  name: rich('Name') || lead.push_name || '',\n  text_phone: phone('Text') || lead.phone || '',\n  status: select('Status') || lead.lead_status || 'new',\n  intent: select('Intent') || lead.intent || 'unknown',\n  business_type: rich('Business Type'),\n  pain_point: rich('Pain Point'),\n  conversation_summary: rich('Conversation Summary') || rich('Summary'),\n  last_user_message: rich('Last User Message') || rich('Last Message'),\n  last_bot_reply: rich('Last Bot Reply'),\n  lead_stage: select('Lead Stage'),\n  buying_intent: select('Buying Intent'),\n  repetition_risk: checkbox('Repetition Risk'),\n  messages_count: number('Messages Count'),\n  last_contact_at: date('Last Contact At'),\n};\n\nreturn [{\n  json: {\n    ...lead,\n    notion_exists: Boolean(existing),\n    notion_page_id: existing?.id || '',\n    notion_page_url: existing?.url || '',\n    notion_memory: memory,\n    business_type: lead.business_type || memory.business_type || null,\n    pain_point: lead.pain_point || memory.pain_point || null,\n    lead_stage: lead.lead_stage || memory.lead_stage || lead.lead_status || 'new',\n    buying_intent: lead.buying_intent || memory.buying_intent || null,\n    previous_conversation_summary: memory.conversation_summary || '',\n    previous_last_user_message: memory.last_user_message || '',\n    previous_last_bot_reply: memory.last_bot_reply || '',\n    messages_count: memory.messages_count || 0,\n  },\n}];"
+        "jsCode": "const lead = $('Parse Classification').item.json;\nconst query = $input.first().json || {};\nconst existing = Array.isArray(query.results) && query.results.length > 0 ? query.results[0] : null;\nconst props = existing?.properties || {};\n\nfunction rich(name) {\n  const prop = props[name];\n  if (!prop) return '';\n  const parts = prop.rich_text || prop.title || [];\n  return parts.map(part => part.plain_text || part.text?.content || '').join('').trim();\n}\nfunction title(name) {\n  return (props[name]?.title || []).map(part => part.plain_text || part.text?.content || '').join('').trim();\n}\nfunction select(name) { return props[name]?.select?.name || ''; }\nfunction phone(name) { return props[name]?.phone_number || ''; }\nfunction date(name) { return props[name]?.date?.start || ''; }\nfunction checkbox(name) { return props[name]?.checkbox === true; }\nfunction number(name) { return typeof props[name]?.number === 'number' ? props[name].number : 0; }\n\nconst memory = {\n  phone: title('Phone') || lead.phone || '',\n  name: rich('Name') || lead.push_name || '',\n  text_phone: phone('Text') || lead.phone || '',\n  status: select('Status') || lead.lead_status || 'new',\n  intent: select('Intent') || lead.intent || 'unknown',\n  business_type: rich('Business Type'),\n  pain_point: rich('Pain Point'),\n  conversation_summary: rich('Conversation Summary') || rich('Summary'),\n  last_user_message: rich('Last User Message') || rich('Last Message'),\n  last_bot_reply: rich('Last Bot Reply'),\n  lead_stage: select('Lead Stage'),\n  buying_intent: select('Buying Intent'),\n  repetition_risk: checkbox('Repetition Risk'),\n  human_takeover: checkbox('Human Takeover'),\n  messages_count: number('Messages Count'),\n  last_contact_at: date('Last Contact At'),\n};\n\nreturn [{\n  json: {\n    ...lead,\n    notion_exists: Boolean(existing),\n    notion_page_id: existing?.id || '',\n    notion_page_url: existing?.url || '',\n    notion_memory: memory,\n    business_type: lead.business_type || memory.business_type || null,\n    pain_point: lead.pain_point || memory.pain_point || null,\n    lead_stage: lead.lead_stage || memory.lead_stage || lead.lead_status || 'new',\n    buying_intent: lead.buying_intent || memory.buying_intent || null,\n    previous_conversation_summary: memory.conversation_summary || '',\n    previous_last_user_message: memory.last_user_message || '',\n    previous_last_bot_reply: memory.last_bot_reply || '',\n    messages_count: memory.messages_count || 0,\n    human_takeover: memory.human_takeover === true,\n  },\n}];"
       },
       "id": "f013caa8-b58c-470b-9bb3-b44ad9870d52",
       "name": "Build Lead Memory From Notion",
@@ -453,7 +453,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2660,
+        2880,
         500
       ]
     },
@@ -466,7 +466,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2880,
+        3100,
         260
       ]
     },
@@ -479,7 +479,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3100,
+        3320,
         380
       ]
     },
@@ -492,7 +492,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3760,
+        3980,
         380
       ]
     },
@@ -528,7 +528,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3980,
+        4200,
         540
       ],
       "continueOnFail": true
@@ -555,8 +555,40 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3210,
+        3430,
         520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "human-takeover-active",
+              "leftValue": "={{ $json.human_takeover === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-human-takeover",
+      "name": "IF: Human Takeover Active?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [
+        2440,
+        380
       ]
     }
   ],
@@ -740,7 +772,7 @@
       "main": [
         [
           {
-            "node": "IF: Telegram Handoff Needed",
+            "node": "IF: Human Takeover Active?",
             "type": "main",
             "index": 0
           }
@@ -839,6 +871,24 @@
         [
           {
             "node": "AI Response Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Human Takeover Active?": {
+      "main": [
+        [
+          {
+            "node": "Return No Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: Telegram Handoff Needed",
             "type": "main",
             "index": 0
           }

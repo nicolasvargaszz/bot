@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from enum import Enum
-import hashlib
-import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -44,7 +44,7 @@ class IncomingMessage(BaseModel):
         """Return the Redis key used to avoid duplicate message processing."""
         return RedisKeyBuilder.processed(self.message_id)
 
-    def to_buffered_message(self) -> "BufferedMessage":
+    def to_buffered_message(self) -> BufferedMessage:
         """Convert an incoming message to the Redis-stored representation."""
         return BufferedMessage(
             instance=self.instance,
@@ -120,9 +120,19 @@ class RedisKeyBuilder:
     def processed(message_id: str) -> str:
         return f"processed:{sanitize_key_part(message_id)}"
 
+    dlq_pending = "dlq:pending"
+
     @staticmethod
-    def failed(instance: str, phone: str, timestamp: int) -> str:
-        return f"failed:{sanitize_key_part(instance)}:{sanitize_key_part(phone)}:{timestamp}"
+    def dlq_entry(dlq_id: str) -> str:
+        return f"dlq:entry:{sanitize_key_part(dlq_id)}"
+
+    @staticmethod
+    def stats_daily(instance: str, day: str) -> str:
+        return f"stats:daily:{sanitize_key_part(instance)}:{day}"
+
+    @staticmethod
+    def stats_hourly(instance: str, day: str) -> str:
+        return f"stats:hourly:{sanitize_key_part(instance)}:{day}"
 
 
 class EvolutionWebhookParser:
@@ -309,7 +319,7 @@ def parse_timestamp(value: Any) -> datetime:
         return datetime.now(UTC)
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=UTC)
-    if isinstance(value, (int, float)):
+    if isinstance(value, int | float):
         timestamp = float(value)
         if timestamp > 10_000_000_000:
             timestamp = timestamp / 1000

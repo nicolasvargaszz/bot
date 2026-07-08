@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import json
 import logging
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 from redis.asyncio import Redis
@@ -18,7 +18,6 @@ from autobots.services.message_buffer.models import (
     RedisKeyBuilder,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -30,7 +29,7 @@ class RedisMessageStore:
         self.settings = settings
 
     @classmethod
-    def from_settings(cls, settings: MessageBufferSettings) -> "RedisMessageStore":
+    def from_settings(cls, settings: MessageBufferSettings) -> RedisMessageStore:
         redis = Redis.from_url(settings.redis_url, decode_responses=True)
         return cls(redis=redis, settings=settings)
 
@@ -125,30 +124,107 @@ class RedisMessageStore:
     async def release_lock(self, session_id: str) -> None:
         await self.redis.delete(RedisKeyBuilder.lock(session_id))
 
-    async def move_to_failed(
-        self,
-        payload: CombinedMessagePayload,
-        error: str,
-    ) -> str:
-        timestamp = int(datetime.now(UTC).timestamp())
-        failed_key = RedisKeyBuilder.failed(payload.instance, payload.phone, timestamp)
-        failed_payload: dict[str, Any] = {
-            "error": error,
-            "failed_at": datetime.now(UTC).isoformat(),
+    # --- Dead-letter queue -------------------------------------------------
+    #
+    # When a combined payload cannot be delivered to n8n, it is parked here
+    # instead of being lost. `dlq:pending` is a sorted set whose score is the
+    # unix timestamp of the next delivery attempt; the payload itself lives in
+    # a `dlq:entry:*` key with its own retention TTL.
+
+    async def push_to_dlq(self, payload: CombinedMessagePayload, error: str) -> str:
+        """Park an undeliverable payload for later redelivery. Returns the DLQ id."""
+        now = datetime.now(UTC)
+        dlq_id = f"{payload.buffer_id}:{int(now.timestamp())}"
+        entry: dict[str, Any] = {
+            "dlq_id": dlq_id,
             "payload": payload.model_dump(mode="json"),
+            "first_error": error,
+            "last_error": error,
+            "attempts": 0,
+            "failed_at": now.isoformat(),
         }
-        await self.redis.set(
-            failed_key,
-            json.dumps(failed_payload, ensure_ascii=False, default=str),
-            ex=self.settings.message_buffer_max_age_seconds,
+        next_attempt_at = now.timestamp() + self.settings.dlq_base_delay_seconds
+        async with self.redis.pipeline(transaction=True) as pipe:
+            pipe.set(
+                RedisKeyBuilder.dlq_entry(dlq_id),
+                json.dumps(entry, ensure_ascii=False, default=str),
+                ex=self.settings.dlq_retention_seconds,
+            )
+            pipe.zadd(RedisKeyBuilder.dlq_pending, {dlq_id: next_attempt_at})
+            await pipe.execute()
+        return dlq_id
+
+    async def get_due_dlq_entries(self, now: float, limit: int = 10) -> list[dict[str, Any]]:
+        """Return DLQ entries whose next delivery attempt is due, pruning expired ones."""
+        dlq_ids = await self.redis.zrangebyscore(
+            RedisKeyBuilder.dlq_pending, "-inf", now, start=0, num=limit
         )
-        await self.redis.hset(
-            f"{failed_key}:meta",
-            mapping={
-                "error": error,
-                "failed_at": failed_payload["failed_at"],
-                "buffer_id": payload.buffer_id,
-            },
+        entries: list[dict[str, Any]] = []
+        for dlq_id in dlq_ids:
+            raw = await self.redis.get(RedisKeyBuilder.dlq_entry(dlq_id))
+            if raw is None:
+                # Entry expired past retention; drop the dangling pointer.
+                await self.redis.zrem(RedisKeyBuilder.dlq_pending, dlq_id)
+                continue
+            try:
+                entries.append(json.loads(raw))
+            except ValueError:
+                logger.warning("invalid_dlq_entry_json", extra={"dlq_id": dlq_id})
+                await self.remove_dlq_entry(dlq_id)
+        return entries
+
+    async def reschedule_dlq_entry(
+        self,
+        entry: dict[str, Any],
+        error: str,
+        next_attempt_at: float,
+    ) -> None:
+        """Record a failed redelivery attempt and schedule the next one."""
+        dlq_id = entry["dlq_id"]
+        entry["attempts"] = int(entry.get("attempts", 0)) + 1
+        entry["last_error"] = error
+        async with self.redis.pipeline(transaction=True) as pipe:
+            pipe.set(
+                RedisKeyBuilder.dlq_entry(dlq_id),
+                json.dumps(entry, ensure_ascii=False, default=str),
+                keepttl=True,
+            )
+            pipe.zadd(RedisKeyBuilder.dlq_pending, {dlq_id: next_attempt_at})
+            await pipe.execute()
+
+    async def remove_dlq_entry(self, dlq_id: str) -> bool:
+        """Delete a DLQ entry after successful redelivery or explicit discard."""
+        async with self.redis.pipeline(transaction=True) as pipe:
+            pipe.delete(RedisKeyBuilder.dlq_entry(dlq_id))
+            pipe.zrem(RedisKeyBuilder.dlq_pending, dlq_id)
+            deleted, removed = await pipe.execute()
+        return bool(deleted or removed)
+
+    async def list_dlq_entries(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Return pending DLQ entries with their scheduled next attempt."""
+        scored = await self.redis.zrange(
+            RedisKeyBuilder.dlq_pending, 0, limit - 1, withscores=True
         )
-        await self.redis.expire(f"{failed_key}:meta", self.settings.message_buffer_max_age_seconds)
-        return failed_key
+        entries: list[dict[str, Any]] = []
+        for dlq_id, next_attempt_at in scored:
+            raw = await self.redis.get(RedisKeyBuilder.dlq_entry(dlq_id))
+            if raw is None:
+                continue
+            try:
+                entry = json.loads(raw)
+            except ValueError:
+                continue
+            entry["next_attempt_at"] = datetime.fromtimestamp(next_attempt_at, UTC).isoformat()
+            entries.append(entry)
+        return entries
+
+    async def replay_dlq_now(self) -> int:
+        """Schedule every pending DLQ entry for immediate redelivery."""
+        dlq_ids = await self.redis.zrange(RedisKeyBuilder.dlq_pending, 0, -1)
+        if not dlq_ids:
+            return 0
+        now = datetime.now(UTC).timestamp()
+        await self.redis.zadd(
+            RedisKeyBuilder.dlq_pending, {dlq_id: now for dlq_id in dlq_ids}
+        )
+        return len(dlq_ids)
